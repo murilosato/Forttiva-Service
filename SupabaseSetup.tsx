@@ -1,0 +1,1 @@
+// Arquivo depreciado. O sistema agora usa conexão direta via lib/supabase.ts
