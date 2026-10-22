@@ -1,19 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --color-forttiva-dark: #0c2a1c;
+  --color-forttiva-deep: #071a11;
+  --color-forttiva-forest: #16462d;
+  --color-forttiva-olive: #4b6f34;
+  --color-forttiva-leaf: #7ea24e;
+  --color-forttiva-sage: #9bb779;
+  --color-forttiva-sand: #ded5c4;
+  --color-forttiva-cream: #f4f3ef;
+  --color-forttiva-charcoal: #18221c;
+}
+
 :root {
   --title-color: #0c2a1c;
   --subtitle-color: #2b3a30;
-  --forttiva-dark: #0c2a1c;
-  --forttiva-deep: #071a11;
-  --forttiva-forest: #16462d;
-  --forttiva-olive: #4b6f34;
-  --forttiva-leaf: #7ea24e;
-  --forttiva-sage: #9bb779;
-  --forttiva-sand: #ded5c4;
-  --forttiva-cream: #f4f3ef;
-  --forttiva-charcoal: #18221c;
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   color: var(--subtitle-color);
@@ -22,25 +28,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-#root:empty {
-  display: none;
-}
-
-/* Custom Forttiva Color Utility Helpers */
-.bg-forttiva-dark { background-color: #0c2a1c; }
-.bg-forttiva-deep { background-color: #071a11; }
-.bg-forttiva-forest { background-color: #16462d; }
-.bg-forttiva-olive { background-color: #4b6f34; }
-.bg-forttiva-leaf { background-color: #7ea24e; }
-.bg-forttiva-cream { background-color: #f4f3ef; }
-.text-forttiva-dark { color: #0c2a1c; }
-.text-forttiva-olive { color: #4b6f34; }
-.text-forttiva-leaf { color: #7ea24e; }
-.text-forttiva-sage { color: #9bb779; }
-.border-forttiva-leaf { border-color: #7ea24e; }
-.border-forttiva-dark { border-color: #0c2a1c; }
-
-/* Text overflow protection */
 .text-nowrap-safe {
   white-space: nowrap;
   overflow: hidden;
