@@ -2,31 +2,42 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Forttiva Service - Gestão e Operações</title>
-    
+
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#092318" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Forttiva Service" />
-    <link rel="manifest" href="manifest.json" />
-    
-    <!-- Favicons / Icons com a nova identidade visual Forttiva -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Ícones -->
     <link rel="icon" type="image/jpeg" href="/assets/aistudio/WhatsApp_Image_2026-10-12_at_20.36.31_50e3bb67.jpeg" />
     <link rel="apple-touch-icon" href="/assets/aistudio/WhatsApp_Image_2026-10-12_at_20.36.31_50e3bb67.jpeg" />
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Fonte -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
     <style>
-      #root:empty { display: none; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #092318;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
       .initial-loader {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         height: 100vh;
+        height: 100dvh;
         background-color: #092318;
-        color: white;
+        color: #fff;
         text-align: center;
         position: relative;
         overflow: hidden;
@@ -35,13 +46,16 @@
         position: absolute;
         inset: 0;
         background: radial-gradient(circle at center, rgba(82, 121, 59, 0.25) 0%, #092318 80%);
-        z-index: 1;
+        z-index: 0;
+        pointer-events: none;
       }
       .loader-spinner {
+        position: relative;
+        z-index: 2;
         width: 38px;
         height: 38px;
         border: 3px solid rgba(255, 255, 255, 0.1);
-        border-top: 3px solid #76994e;
+        border-top-color: #76994e;
         border-radius: 50%;
         animation: spin 0.9s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
         margin-bottom: 2rem;
@@ -54,29 +68,59 @@
         position: relative;
         z-index: 2;
       }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      .loader-title {
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-size: 1.75rem;
+        margin: 0;
+        line-height: 1;
+        color: #fff;
+      }
+      .loader-subtitle {
+        font-size: 0.75rem;
+        color: #a2b882;
+        margin: 0.35rem 0 0.5rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.3em;
+      }
+      .loader-tagline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 0.25rem;
+      }
+      .loader-tagline span:first-child {
+        display: inline-block;
+        width: 14px;
+        height: 1.5px;
+        background-color: #52793b;
+        border-radius: 999px;
+      }
+      .loader-tagline span:last-child {
+        font-size: 0.65rem;
+        color: rgba(255, 255, 255, 0.7);
+        font-style: italic;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
-  <link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-[#092318]">
+
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+
+  <body>
     <div id="root">
       <div class="initial-loader">
         <div class="loader-overlay"></div>
         <div class="loader-spinner"></div>
         <div class="loader-content">
-          <div style="text-align: center;">
-            <h2 style="font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; font-size: 1.75rem; margin: 0; line-height: 1; color: #ffffff;">
-              FORTTIVA
-            </h2>
-            <p style="font-size: 0.75rem; color: #a2b882; margin-top: 0.35rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3em; margin-bottom: 0.5rem;">
-              S E R V I Ç O S
-            </p>
-            <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 0.25rem;">
-              <span style="display: inline-block; width: 14px; height: 1.5px; background-color: #52793b; border-radius: 999px;"></span>
-              <span style="font-size: 0.65rem; color: rgba(255,255,255,0.7); font-style: italic;">
-                Força e eficiência em campo.
-              </span>
-            </div>
+          <h2 class="loader-title">Forttiva</h2>
+          <p class="loader-subtitle">Serviços</p>
+          <div class="loader-tagline">
+            <span></span>
+            <span>Força e eficiência em campo.</span>
           </div>
         </div>
       </div>
