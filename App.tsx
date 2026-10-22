@@ -119,12 +119,12 @@ const App = () => {
 
   if (isInitializing) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#092318] text-center p-6">
-        <div className="w-16 h-16 border-4 border-emerald-950 border-t-[#76994e] rounded-full animate-spin shadow-[0_0_25px_rgba(118,153,78,0.35)]" />
-        <div className="mt-8 space-y-1">
-          <h2 className="font-black text-white uppercase tracking-[0.3em] text-[12px]">FORTTIVA SERVICE</h2>
-          <p className="text-[10px] text-[#a2b882] font-semibold italic tracking-wider">Força e eficiência em campo.</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#061810] text-center p-6 relative">
+        <div className="w-10 h-10 border-3 border-white/10 border-t-[#7ea24e] rounded-full animate-spin shadow-[0_0_25px_rgba(126,162,78,0.35)] mb-6" />
+        <div className="bg-white rounded-2xl px-5 py-2.5 shadow-xl border border-white/20 mb-3">
+          <img src="/assets/aistudio/image_d343a7bb.png" alt="Forttiva Serviços" className="h-8 w-auto object-contain select-none" />
         </div>
+        <p className="text-[10px] text-[#9bb779] font-semibold italic tracking-wider">Força e eficiência em campo.</p>
       </div>
     );
   }

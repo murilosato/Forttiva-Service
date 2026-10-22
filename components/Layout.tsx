@@ -63,8 +63,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user
 
   const Sidebar = () => (
     <div className="flex flex-col h-full bg-[#071a11] text-slate-300 w-64 fixed left-0 top-0 z-50 border-r border-white/10 shadow-2xl">
-      <div className="p-6 border-b border-white/10 bg-[#05140d]">
-        <ForttivaLogo variant="light" size="md" showSlogan={true} />
+      <div className="p-4 border-b border-white/10 bg-[#05140d] flex items-center justify-center">
+        <ForttivaLogo variant="light" size="sm" />
       </div>
       
       <div className="p-5 border-b border-white/10 bg-[#0c2a1c]/70">

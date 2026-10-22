@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, UserRole } from '../types';
+import { User } from '../types';
 import { 
   Lock, 
   Mail, 
@@ -11,9 +11,10 @@ import {
   Download, 
   X,
   ShieldCheck,
-  Cog,
-  Users,
-  Leaf
+  Zap,
+  Users2,
+  TrendingUp,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ForttivaLogo from './ForttivaLogo';
@@ -30,8 +31,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showInstallModal, setShowInstallModal] = useState(false);
-
-  const brandImage = "/assets/aistudio/WhatsApp_Image_2026-10-12_at_20.36.31_50e3bb67.jpeg";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +61,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       console.warn('Falha no login:', err);
       const msg = err.message || '';
       if (msg.includes('Failed to fetch') || err.name === 'TypeError') {
-        setError('Falha de conexão com o Supabase. Verifique sua conexão com a internet ou se extensões de bloqueio estão ativas.');
+        setError('Falha de conexão com o servidor. Verifique sua conexão à internet.');
       } else {
         setError(msg || 'Falha na autenticação.');
       }
@@ -71,78 +70,83 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#092318] flex items-center justify-center p-4 font-sans antialiased relative overflow-hidden">
-      {/* Background with Brand Radial Gradients */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center opacity-10 blur-sm scale-105"
-        style={{ backgroundImage: `url("${brandImage}")` }} 
-      />
-      <div className="absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#14432a]/40 via-[#092318]/90 to-[#04120c]" />
-      
+    <div className="min-h-screen bg-[#061810] flex flex-col items-center justify-center p-4 sm:p-6 font-sans antialiased relative overflow-x-hidden selection:bg-[#7ea24e] selection:text-white">
+      {/* Background with Ambient Radial Glows */}
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-[#17482e]/40 via-[#0a2318]/90 to-[#04120c] pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#2d7d49]/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#7ea24e]/10 rounded-full blur-3xl pointer-events-none" />
+
       {/* Botão de Instalação PWA */}
       <button 
+        type="button"
         onClick={() => setShowInstallModal(true)}
-        className="fixed top-6 right-6 flex items-center gap-2.5 bg-white/5 backdrop-blur-md border border-white/10 px-5 py-2.5 rounded-2xl shadow-sm hover:bg-white/10 text-white transition-all active:scale-95 z-20"
+        className="fixed top-5 right-5 sm:top-6 sm:right-6 flex items-center gap-2 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 px-4 py-2.5 rounded-2xl shadow-lg text-white transition-all active:scale-95 z-20 cursor-pointer"
       >
-        <Download size={16} className="text-[#a2b882]" />
+        <Download size={15} className="text-[#9bb779]" />
         <span className="text-[10px] font-black uppercase tracking-widest">Instalar App</span>
       </button>
 
-      <div className="w-full max-w-[440px] relative z-10 py-6">
-        {/* Brand Header */}
-        <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-           <div className="bg-[#071c13] p-4 rounded-3xl border border-white/10 shadow-2xl mb-4">
-             <ForttivaLogo variant="light" size="lg" showSlogan={true} />
-           </div>
+      <div className="w-full max-w-[460px] relative z-10 py-6 flex flex-col items-center">
+        {/* Brand Header com a Logo Oficial Forttiva Serviços */}
+        <div className="flex flex-col items-center mb-6 w-full animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="hover:scale-[1.02] transition-transform duration-300">
+            <ForttivaLogo variant="card" size="lg" />
+          </div>
 
-           {/* Brand Pillars / Ícones da Marca */}
-           <div className="grid grid-cols-4 gap-2 w-full max-w-[360px] mt-2">
-             <div className="bg-white/5 border border-white/5 rounded-xl p-2 text-center flex flex-col items-center">
-               <ShieldCheck size={14} className="text-[#a2b882] mb-0.5" />
-               <span className="text-[7.5px] font-bold text-white/70 uppercase tracking-wider">Segurança</span>
-             </div>
-             <div className="bg-white/5 border border-white/5 rounded-xl p-2 text-center flex flex-col items-center">
-               <Cog size={14} className="text-[#a2b882] mb-0.5" />
-               <span className="text-[7.5px] font-bold text-white/70 uppercase tracking-wider">Eficiência</span>
-             </div>
-             <div className="bg-white/5 border border-white/5 rounded-xl p-2 text-center flex flex-col items-center">
-               <Users size={14} className="text-[#a2b882] mb-0.5" />
-               <span className="text-[7.5px] font-bold text-white/70 uppercase tracking-wider">Equipe</span>
-             </div>
-             <div className="bg-white/5 border border-white/5 rounded-xl p-2 text-center flex flex-col items-center">
-               <Leaf size={14} className="text-[#a2b882] mb-0.5" />
-               <span className="text-[7.5px] font-bold text-white/70 uppercase tracking-wider">Resultado</span>
-             </div>
-           </div>
+          {/* Pilares da Marca */}
+          <div className="grid grid-cols-4 gap-2 w-full max-w-[420px] mt-5 px-1">
+            <div className="bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-2.5 text-center flex flex-col items-center shadow-sm">
+              <ShieldCheck size={16} className="text-[#9bb779] mb-1" />
+              <span className="text-[8.5px] font-bold text-white/80 uppercase tracking-wider">Segurança</span>
+            </div>
+            <div className="bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-2.5 text-center flex flex-col items-center shadow-sm">
+              <Zap size={16} className="text-[#9bb779] mb-1" />
+              <span className="text-[8.5px] font-bold text-white/80 uppercase tracking-wider">Eficiência</span>
+            </div>
+            <div className="bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-2.5 text-center flex flex-col items-center shadow-sm">
+              <Users2 size={16} className="text-[#9bb779] mb-1" />
+              <span className="text-[8.5px] font-bold text-white/80 uppercase tracking-wider">Equipe</span>
+            </div>
+            <div className="bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-2.5 text-center flex flex-col items-center shadow-sm">
+              <TrendingUp size={16} className="text-[#9bb779] mb-1" />
+              <span className="text-[8.5px] font-bold text-white/80 uppercase tracking-wider">Resultado</span>
+            </div>
+          </div>
         </div>
 
         {/* Card de Login */}
-        <div className="bg-white/[0.08] backdrop-blur-2xl rounded-[40px] shadow-2xl overflow-hidden border border-white/15 animate-in zoom-in-95 duration-500">
-          <form onSubmit={handleSubmit} className="p-8 sm:p-10 space-y-6">
+        <div className="w-full bg-[#0a2318]/90 backdrop-blur-2xl rounded-[36px] shadow-[0_25px_60px_rgba(0,0,0,0.6)] overflow-hidden border border-white/15 animate-in zoom-in-95 duration-500">
+          <form onSubmit={handleSubmit} className="p-7 sm:p-9 space-y-6">
             <div className="text-center">
-               <h2 className="text-[11px] font-black text-white/70 uppercase tracking-[0.25em]">
-                  Terminal Seguro de Operações
-               </h2>
-               <p className="text-[9px] text-[#a2b882] font-semibold mt-1 uppercase tracking-wider">
-                  Acesse com suas credenciais Forttiva
-               </p>
+              <h2 className="text-xs font-black text-white uppercase tracking-[0.25em]">
+                Terminal Seguro de Operações
+              </h2>
+              <p className="text-[10px] text-[#9bb779] font-medium mt-1.5 uppercase tracking-wider">
+                Acesse com suas credenciais corporativas
+              </p>
             </div>
 
             {error && (
-              <div className="bg-rose-500/20 border border-rose-500/30 text-rose-100 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center">
+              <div className="bg-rose-500/15 border border-rose-500/30 text-rose-200 p-4 rounded-2xl text-[11px] font-bold text-center leading-relaxed animate-in fade-in">
                 {error}
               </div>
             )}
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-3">E-mail Operacional</label>
-                <div className="relative">
-                  <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/30" size={17} />
+              {/* Campo E-mail */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-white/70 uppercase tracking-wider block ml-3">
+                  E-mail Operacional
+                </label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-4.5 text-[#9bb779] pointer-events-none flex items-center justify-center">
+                    <Mail size={18} />
+                  </div>
                   <input 
                     type="email" 
                     required
-                    className="w-full bg-white/5 border border-white/10 pl-13 pr-4 py-4 rounded-[22px] text-[13px] text-white font-black outline-none focus:border-[#76994e] focus:bg-white/10 transition-all placeholder:text-white/20"
+                    autoComplete="email"
+                    className="w-full bg-[#061810]/80 border border-white/15 focus:border-[#7ea24e] focus:bg-[#082216] focus:ring-2 focus:ring-[#7ea24e]/25 text-white placeholder:text-white/30 text-[13px] font-semibold rounded-2xl py-3.5 pl-14 pr-4 outline-none transition-all duration-200 shadow-inner"
                     placeholder="usuario@forttivaservicos.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -150,68 +154,128 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-3">Chave de Segurança</label>
-                <div className="relative">
-                  <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-white/30" size={17} />
+              {/* Campo Senha */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-white/70 uppercase tracking-wider block ml-3">
+                  Chave de Segurança
+                </label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-4.5 text-[#9bb779] pointer-events-none flex items-center justify-center">
+                    <Lock size={18} />
+                  </div>
                   <input 
                     type={showPassword ? 'text' : 'password'} 
                     required
-                    className="w-full bg-white/5 border border-white/10 pl-13 pr-12 py-4 rounded-[22px] text-[13px] text-white font-black outline-none focus:border-[#76994e] focus:bg-white/10 transition-all placeholder:text-white/20"
+                    autoComplete="current-password"
+                    className="w-full bg-[#061810]/80 border border-white/15 focus:border-[#7ea24e] focus:bg-[#082216] focus:ring-2 focus:ring-[#7ea24e]/25 text-white placeholder:text-white/30 text-[13px] font-semibold rounded-2xl py-3.5 pl-14 pr-12 outline-none transition-all duration-200 shadow-inner"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)} 
+                    className="absolute right-4.5 text-white/40 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                    aria-label={showPassword ? "Ocultar senha" : "Exibir senha"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* Botão de Entrar */}
             <button 
               type="submit"
               disabled={isLoading}
-              className="w-full bg-[#1b4d2e] hover:bg-[#23633c] text-white disabled:opacity-50 py-4.5 rounded-[22px] font-black uppercase text-[11px] tracking-[0.25em] transition-all flex items-center justify-center gap-2.5 active:scale-95 shadow-[0_0_25px_rgba(27,77,46,0.6)] border border-[#76994e]/40"
+              className="w-full bg-gradient-to-r from-[#216138] via-[#2c7844] to-[#408e31] hover:from-[#297845] hover:to-[#4ca73b] text-white disabled:opacity-50 py-4 rounded-2xl font-black uppercase text-[11px] tracking-[0.22em] transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] shadow-[0_10px_25px_rgba(33,97,56,0.5)] border border-white/20 cursor-pointer"
             >
-              {isLoading ? <Loader2 className="animate-spin" size={19} /> : <>ENTRAR NO SISTEMA <ArrowRight size={18} /></>}
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>AUTENTICANDO...</span>
+                </div>
+              ) : (
+                <>
+                  <span>ENTRAR NO SISTEMA</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
 
-          <div className="bg-[#05150e]/60 p-5 flex items-center justify-center gap-2.5 border-t border-white/10">
-             <Smartphone size={15} className="text-[#a2b882]/60" />
-             <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.15em]">
-               Forttiva Cloud Terminal v4.0
-             </span>
+          {/* Rodapé do Card */}
+          <div className="bg-[#04120b]/80 py-4 px-6 flex items-center justify-between border-t border-white/10">
+            <div className="flex items-center gap-2 text-white/50">
+              <Smartphone size={14} className="text-[#9bb779]" />
+              <span className="text-[9px] font-black uppercase tracking-[0.18em]">
+                Forttiva Cloud Terminal v4.2
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-emerald-400/70 text-[9px] font-bold">
+              <CheckCircle2 size={12} />
+              <span>Conexão Segura</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Modal de Instalação do App */}
+      {/* Modal de Instalação PWA */}
       {showInstallModal && (
-        <div className="fixed inset-0 z-[100] bg-[#092318]/90 backdrop-blur-md flex items-center justify-center p-4">
-           <div className="bg-white rounded-[40px] w-full max-w-sm p-8 text-center relative overflow-hidden shadow-2xl animate-in zoom-in-95">
-              <button onClick={() => setShowInstallModal(false)} className="absolute top-5 right-5 text-slate-300 hover:text-slate-900"><X size={22}/></button>
-              
-              <div className="flex flex-col items-center gap-3 mt-2">
-                <img src={brandImage} alt="Forttiva App Icon" className="w-20 h-20 rounded-2xl shadow-xl border border-slate-100 object-cover" />
-                <h3 className="text-sm font-black uppercase text-[#092318] tracking-widest">Forttiva Service App</h3>
-                <p className="text-[10px] text-[#52793b] font-bold italic">Força e eficiência em campo.</p>
+        <div className="fixed inset-0 z-[100] bg-[#061810]/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-[36px] w-full max-w-sm p-7 text-center relative overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <button 
+              onClick={() => setShowInstallModal(false)} 
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-900 p-1 rounded-full cursor-pointer transition-colors"
+              aria-label="Fechar"
+            >
+              <X size={20}/>
+            </button>
+            
+            <div className="flex flex-col items-center gap-3 mt-1">
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
+                <img 
+                  src="/assets/aistudio/image_d343a7bb.png" 
+                  alt="Forttiva App Icon" 
+                  className="h-10 w-auto object-contain" 
+                />
+              </div>
+              <h3 className="text-sm font-black uppercase text-[#0c2a1c] tracking-widest">
+                Forttiva Service App
+              </h3>
+              <p className="text-[11px] text-[#4b6f34] font-semibold italic">
+                Força e eficiência em campo.
+              </p>
+            </div>
+
+            <div className="my-5 space-y-3 text-left">
+              <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100/80">
+                <span className="text-[#16462d] block mb-1 font-black text-[10px] uppercase tracking-wider">
+                  Android / Chrome:
+                </span>
+                <p className="text-[11px] font-medium text-slate-700 leading-relaxed">
+                  Abra o menu do navegador (três pontinhos) e toque em <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>.
+                </p>
               </div>
 
-              <div className="my-6 space-y-3">
-                <p className="text-[11px] font-bold text-slate-600 uppercase leading-relaxed text-left bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
-                  <span className="text-[#1b4d2e] block mb-1 font-black">Para Android:</span>
-                  No menu do navegador (três pontos), selecione "Instalar aplicativo" ou "Adicionar à tela inicial".
-                </p>
-                <p className="text-[11px] font-bold text-slate-600 uppercase leading-relaxed text-left bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
-                  <span className="text-[#1b4d2e] block mb-1 font-black">Para iOS / iPhone:</span>
-                  No botão de compartilhar (ícone quadrado com seta), selecione "Adicionar à Tela de Início".
+              <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100/80">
+                <span className="text-[#16462d] block mb-1 font-black text-[10px] uppercase tracking-wider">
+                  iPhone / iOS (Safari):
+                </span>
+                <p className="text-[11px] font-medium text-slate-700 leading-relaxed">
+                  Toque no botão de <strong>Compartilhar</strong> (ícone com quadrado e seta) e selecione <strong>"Adicionar à Tela de Início"</strong>.
                 </p>
               </div>
+            </div>
 
-              <button onClick={() => setShowInstallModal(false)} className="w-full bg-[#092318] hover:bg-[#14432a] text-white py-4 rounded-[18px] font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">ENTENDI</button>
-           </div>
+            <button 
+              type="button"
+              onClick={() => setShowInstallModal(false)} 
+              className="w-full bg-[#16462d] hover:bg-[#0c2a1c] text-white py-3.5 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-md active:scale-95 transition-all cursor-pointer"
+            >
+              ENTENDI
+            </button>
+          </div>
         </div>
       )}
     </div>
