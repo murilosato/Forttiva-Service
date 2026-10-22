@@ -34,10 +34,9 @@ export const ForttivaLogo: React.FC<ForttivaLogoProps> = ({
     return (
       <div className={`overflow-hidden relative rounded-xl bg-white p-1 inline-flex items-center justify-center shadow-sm shrink-0 ${iconContainerMap[size]} ${className}`}>
         <img 
-          src="/assets/aistudio/image_d343a7bb.png" 
+          src="/assets/aistudio/image_b058c63c.png" 
           alt="Forttiva" 
-          className="h-full max-w-none object-cover object-left select-none" 
-          style={{ width: '315%' }}
+          className="w-full h-full object-contain select-none" 
         />
       </div>
     );

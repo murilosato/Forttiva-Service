@@ -1,0 +1,24 @@
+{
+  "name": "Forttiva Service - Força e Eficiência em Campo",
+  "short_name": "Forttiva",
+  "description": "Sistema de Gestão de Produção, Equipes e Operações Forttiva Serviços",
+  "start_url": "/",
+  "display": "minimal-ui",
+  "background_color": "#092318",
+  "theme_color": "#092318",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/aistudio/image_b058c63c.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/aistudio/image_b058c63c.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

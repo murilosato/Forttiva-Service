@@ -76,14 +76,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#2d7d49]/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#7ea24e]/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Botão de Instalação PWA */}
+      {/* Botão de Instalação PWA com Ícone Oficial Forttiva */}
       <button 
         type="button"
         onClick={() => setShowInstallModal(true)}
-        className="fixed top-5 right-5 sm:top-6 sm:right-6 flex items-center gap-2 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 px-4 py-2.5 rounded-2xl shadow-lg text-white transition-all active:scale-95 z-20 cursor-pointer"
+        className="fixed top-5 right-5 sm:top-6 sm:right-6 flex items-center gap-2.5 bg-[#0e3120]/80 hover:bg-[#133f2a] backdrop-blur-md border border-white/20 px-3.5 py-2 rounded-2xl shadow-xl text-white transition-all active:scale-95 z-20 cursor-pointer group"
       >
-        <Download size={15} className="text-[#9bb779]" />
-        <span className="text-[10px] font-black uppercase tracking-widest">Instalar App</span>
+        <div className="w-6 h-6 rounded-lg bg-white p-0.5 flex items-center justify-center shadow-xs shrink-0">
+          <img src="/assets/aistudio/image_b058c63c.png" alt="Forttiva" className="w-full h-full object-contain" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Download size={13} className="text-[#9bb779] group-hover:translate-y-0.5 transition-transform" />
+          <span className="text-[10px] font-black uppercase tracking-widest">Instalar App</span>
+        </div>
       </button>
 
       <div className="w-full max-w-[460px] relative z-10 py-6 flex flex-col items-center">
@@ -233,11 +238,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </button>
             
             <div className="flex flex-col items-center gap-3 mt-1">
-              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
+              <div className="w-16 h-16 bg-white rounded-2xl border border-emerald-100 shadow-md p-2 flex items-center justify-center">
                 <img 
-                  src="/assets/aistudio/image_d343a7bb.png" 
+                  src="/assets/aistudio/image_b058c63c.png" 
                   alt="Forttiva App Icon" 
-                  className="h-10 w-auto object-contain" 
+                  className="w-full h-full object-contain" 
                 />
               </div>
               <h3 className="text-sm font-black uppercase text-[#0c2a1c] tracking-widest">
