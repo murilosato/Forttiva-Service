@@ -461,18 +461,34 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const filteredEmployees = state.employees.filter(e => showInactive || e.status === 'active');
 
-  // Cálculos de Resumo Financeiro do Mês Visualizado - ATUALIZADO PARA INCLUIR BONUS
+  const handlePrevMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setCurrentCalendarDate(new Date());
+  };
+
+  // Cálculos de Resumo Financeiro do Mês Visualizado - Fechamento do Mês
   const monthSummary = useMemo(() => {
     const yearMonth = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}`;
-    const visibleEmpIds = new Set(filteredEmployees.map(e => e.id));
+    const allEmpMap = new Map<string, Employee>(state.employees.map(e => [e.id, e]));
     
     let paid = 0;
     let pending = 0;
 
     state.attendanceRecords.forEach(record => {
-      if (record.date.startsWith(yearMonth) && visibleEmpIds.has(record.employeeId)) {
+      if (record.date.startsWith(yearMonth)) {
+        const emp = allEmpMap.get(record.employeeId);
+        if (!emp) return;
+        if (!showInactive && emp.status === 'inactive') return;
+
         // Cálculo: (Valor do Dia + Bônus) - Descontos
-        const netValue = (record.value + (record.bonusValue || 0)) - (record.discountValue || 0);
+        const netValue = Math.max(0, (record.value + (record.bonusValue || 0)) - (record.discountValue || 0));
         if (record.paymentStatus === 'pago') {
           paid += netValue;
         } else {
@@ -482,7 +498,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     });
 
     return { paid, pending, total: paid + pending };
-  }, [state.attendanceRecords, filteredEmployees, currentCalendarDate]);
+  }, [state.attendanceRecords, state.employees, currentCalendarDate, showInactive]);
 
   const formatMoney = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -523,26 +539,14 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   const getAttendanceLabel = (record: AttendanceRecord | undefined, emp: Employee) => {
     if (!record) return '-';
     const virtualStatus = getVirtualStatus(record);
-    if (emp.paymentModality === 'CLT') {
-      switch(virtualStatus) {
-        case 'present': return record.clockIn || 'P';
-        case 'atestado': return 'AT';
-        case 'justified': return 'FJ';
-        case 'vacation': return 'FE';
-        case 'absent': return 'F';
-        case 'partial': return 'P';
-        default: return '-';
-      }
-    } else {
-      switch(virtualStatus) {
-        case 'present': return 'P';
-        case 'partial': return 'H';
-        case 'absent': return 'F';
-        case 'atestado': return 'AT';
-        case 'justified': return 'FJ';
-        case 'vacation': return 'FE';
-        default: return '-';
-      }
+    switch(virtualStatus) {
+      case 'present': return 'P';
+      case 'partial': return '½';
+      case 'absent': return 'F';
+      case 'atestado': return 'AT';
+      case 'justified': return 'FJ';
+      case 'vacation': return 'FE';
+      default: return '-';
     }
   };
 
@@ -563,40 +567,131 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         </div>
       </header>
 
-      {/* Cards de Resumo Financeiro de Equipe */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-[32px] border border-slate-200/80 shadow-sm flex items-center gap-4 transition-all hover:border-[#7ea24e]/50 min-w-0">
-           <div className="w-14 h-14 bg-[#eaf0e3] text-[#16462d] rounded-2xl flex items-center justify-center shadow-inner shrink-0"><CheckCircle2 size={28} /></div>
-           <div className="min-w-0">
-              <p className="text-[9px] font-black text-[#4b6f34] uppercase tracking-wider mb-1 truncate">Total Já Pago (Mês)</p>
-              <h3 className="text-2xl font-black text-[#16462d] tracking-tighter truncate">{formatMoney(monthSummary.paid)}</h3>
-           </div>
+      {/* Subtotais de Fechamento do Mês em Visualização */}
+      <div className="bg-white p-5 md:p-6 rounded-[32px] border border-slate-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#0c2a1c] text-[#9bb779] flex items-center justify-center shadow-xs shrink-0">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <span className="text-[9px] font-black text-[#4b6f34] uppercase tracking-widest block">
+                Fechamento do Mês em Visualização
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight">
+                {currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+              </h3>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button 
+              type="button"
+              onClick={handlePrevMonth}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+              title="Mês Anterior"
+            >
+              <ChevronLeft size={14} /> Mês Anterior
+            </button>
+            <button 
+              type="button"
+              onClick={handleCurrentMonth}
+              className="px-3 py-1.5 bg-[#eaf0e3] hover:bg-[#d8e4cd] text-[#16462d] border border-[#7ea24e]/30 rounded-xl font-black text-[9px] uppercase transition-all shadow-xs cursor-pointer active:scale-95"
+              title="Mês Atual"
+            >
+              Hoje
+            </button>
+            <button 
+              type="button"
+              onClick={handleNextMonth}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+              title="Próximo Mês"
+            >
+              Próximo <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
-        <div className="bg-white p-6 rounded-[32px] border border-slate-200/80 shadow-sm flex items-center gap-4 transition-all hover:border-amber-200 min-w-0">
-           <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center shadow-inner shrink-0"><Wallet size={28} /></div>
-           <div className="min-w-0">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1 truncate">Saldo Pendente Acumulado</p>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tighter truncate">{formatMoney(monthSummary.pending)}</h3>
-           </div>
-        </div>
-        <div className="bg-[#0c2a1c] p-6 rounded-[32px] border border-[#7ea24e]/20 shadow-2xl flex items-center gap-4 transition-all hover:bg-[#103322] min-w-0">
-           <div className="w-14 h-14 bg-white/10 text-[#7ea24e] rounded-2xl flex items-center justify-center shadow-inner shrink-0"><BarChart3 size={28} /></div>
-           <div className="min-w-0">
-              <p className="text-[9px] font-black text-[#9bb779] uppercase tracking-wider mb-1 truncate">Custo Total de Operação</p>
-              <h3 className="text-2xl font-black text-white tracking-tighter truncate">{formatMoney(monthSummary.total)}</h3>
-           </div>
+
+        {/* Subtotais: Já Pago, Devendo (A Pagar) e Fechamento Total */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Subtotal Já Pago */}
+          <div className="bg-gradient-to-br from-emerald-50/90 to-emerald-50/40 p-5 rounded-2xl border border-emerald-200/80 shadow-xs flex items-center gap-4 transition-all">
+             <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+               <CheckCircle2 size={24} />
+             </div>
+             <div className="min-w-0">
+                <p className="text-[9px] font-black text-emerald-800 uppercase tracking-wider mb-0.5 truncate">
+                  Subtotal Já Pago
+                </p>
+                <h4 className="text-2xl font-black text-emerald-950 tracking-tight truncate">
+                  {formatMoney(monthSummary.paid)}
+                </h4>
+                <p className="text-[8px] font-bold text-emerald-700/80 uppercase tracking-widest mt-0.5">
+                  Quitado em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
+                </p>
+             </div>
+          </div>
+
+          {/* Subtotal Devendo (Pendente) */}
+          <div className="bg-gradient-to-br from-amber-50/90 to-amber-50/40 p-5 rounded-2xl border border-amber-200/80 shadow-xs flex items-center gap-4 transition-all">
+             <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+               <Wallet size={24} />
+             </div>
+             <div className="min-w-0">
+                <p className="text-[9px] font-black text-amber-800 uppercase tracking-wider mb-0.5 truncate">
+                  Subtotal Devendo (A Pagar)
+                </p>
+                <h4 className="text-2xl font-black text-amber-950 tracking-tight truncate">
+                  {formatMoney(monthSummary.pending)}
+                </h4>
+                <p className="text-[8px] font-bold text-amber-700/80 uppercase tracking-widest mt-0.5">
+                  Em aberto em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
+                </p>
+             </div>
+          </div>
+
+          {/* Fechamento Consolidado do Mês */}
+          <div className="bg-[#0c2a1c] p-5 rounded-2xl border border-[#7ea24e]/30 shadow-md flex items-center gap-4 transition-all text-white">
+             <div className="w-12 h-12 bg-white/10 text-[#9bb779] rounded-2xl flex items-center justify-center shadow-inner shrink-0">
+               <DollarSign size={24} />
+             </div>
+             <div className="min-w-0">
+                <p className="text-[9px] font-black text-[#9bb779] uppercase tracking-wider mb-0.5 truncate">
+                  Fechamento do Mês ({currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()})
+                </p>
+                <h4 className="text-2xl font-black text-white tracking-tight truncate">
+                  {formatMoney(monthSummary.total)}
+                </h4>
+                <p className="text-[8px] font-bold text-white/60 uppercase tracking-widest mt-0.5">
+                  Total consolidado do período
+                </p>
+             </div>
+          </div>
         </div>
       </div>
 
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
         <div className="p-4 md:p-6 border-b bg-slate-50 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setCurrentCalendarDate(new Date(currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1)))} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><ChevronLeft size={18} /></button>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">{currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}</h3>
-            <button onClick={() => setCurrentCalendarDate(new Date(currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1)))} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><ChevronRight size={18} /></button>
+          <div className="flex items-center gap-3">
+            <button onClick={handlePrevMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Mês Anterior"><ChevronLeft size={18} /></button>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">{currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}</h3>
+            <button onClick={handleNextMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Próximo Mês"><ChevronRight size={18} /></button>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-slate-400 font-black text-[8px] uppercase tracking-widest">
-             Legenda: <span className="text-emerald-500">P=Presença</span> • <span className="text-rose-500">F=Falta</span> • <span className="text-purple-500">AT=Atestado</span> • <span className="text-blue-500">FJ=Justificada</span> • <span className="text-amber-500">FE=Férias</span>
+          
+          {/* Legenda Atualizada: Apenas Presença, Falta e Meia Diária com suas letras e cores */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Legenda:</span>
+             <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
+               <span className="w-5 h-5 rounded-md bg-emerald-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">P</span>
+               <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider">Presença</span>
+             </div>
+             <div className="inline-flex items-center gap-1.5 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-xl">
+               <span className="w-5 h-5 rounded-md bg-rose-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">F</span>
+               <span className="text-[9px] font-black uppercase text-rose-800 tracking-wider">Falta</span>
+             </div>
+             <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl">
+               <span className="w-5 h-5 rounded-md bg-amber-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">½</span>
+               <span className="text-[9px] font-black uppercase text-amber-800 tracking-wider">Meia Diária</span>
+             </div>
           </div>
         </div>
         
@@ -644,15 +739,15 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                     let bgColor = 'text-slate-200 hover:bg-slate-100';
                     if (att) {
                         switch(virtualStatus) {
-                          case 'present': bgColor = emp.paymentModality === 'CLT' ? 'bg-blue-600 text-white shadow-inner' : 'bg-emerald-500 text-white shadow-inner'; break;
-                          case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner'; break;
-                          case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner'; break;
-                          case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner'; break;
-                          case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner'; break;
-                          case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner'; break;
+                          case 'present': bgColor = 'bg-emerald-600 text-white shadow-inner font-black'; break;
+                          case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner font-black'; break;
+                          case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner font-black'; break;
+                          case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner font-black'; break;
+                          case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner font-black'; break;
+                          case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner font-black'; break;
                         }
                     } else if (isToday) {
-                        bgColor = 'bg-blue-50/30 text-blue-400';
+                        bgColor = 'bg-blue-50/40 text-blue-500 font-bold';
                     }
                     return (
                       <td key={day} onClick={() => handleToggleAttendance(emp.id, dateStr)} className={`p-0 border-r h-12 md:h-10 text-center text-[10px] font-black transition-all cursor-pointer active:scale-95 ${bgColor}`}>
