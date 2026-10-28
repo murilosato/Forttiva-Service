@@ -1,7 +1,13 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { AppState, Employee, AttendanceRecord } from '../types';
-import { Users, UserPlus, X, ChevronRight, ChevronLeft, Edit2, Trash2, Loader2, Save, Fingerprint, Smartphone, MapPin, CreditCard, Power, UserX, AlertCircle, Clock, Briefcase, HeartPulse, ShieldAlert, Palmtree, Mail, DollarSign, Calendar, Users2, CheckCircle2, Wallet, BarChart3, Send, Printer } from 'lucide-react';
+import { AppState, Employee, AttendanceRecord, Candidate } from '../types';
+import { 
+  Users, UserPlus, Plus, X, ChevronRight, ChevronLeft, Edit2, Trash2, Loader2, Save, 
+  Fingerprint, Smartphone, MapPin, CreditCard, Power, UserX, AlertCircle, Clock, 
+  Briefcase, HeartPulse, ShieldAlert, Palmtree, Mail, DollarSign, Calendar, Users2, 
+  CheckCircle2, Wallet, BarChart3, Send, Printer, Search, Filter, Phone, Sparkles, 
+  Award, FileText, Check, UserCheck, Cake, UserRoundSearch, Eye
+} from 'lucide-react';
 import { dbSave, dbDelete, fetchCompleteCompanyData } from '../lib/supabase';
 import ConfirmationModal from './ConfirmationModal';
 import { EmployeeTransaction } from '../types';
@@ -81,6 +87,150 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     status: 'present' as AttendanceRecord['status'],
     observation: ''
   });
+
+  // Controle de Abas: 'team' (Equipe e Frequência) ou 'candidates' (Banco de Candidatos)
+  const [rhTab, setRhTab] = useState<'team' | 'candidates'>('team');
+
+  // Estados do Banco de Candidatos
+  const [showCandidateModal, setShowCandidateModal] = useState(false);
+  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
+  const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
+  const [candidateSearchText, setCandidateSearchText] = useState('');
+  const [candidateStatusFilter, setCandidateStatusFilter] = useState('ALL');
+  const [candidateRoleFilter, setCandidateRoleFilter] = useState('ALL');
+
+  const initialCandidateForm = {
+    name: '',
+    birthDate: '',
+    phone: '',
+    address: '',
+    experience: '',
+    observations: '',
+    desiredRole: '',
+    status: 'banco_talentos' as Candidate['status']
+  };
+
+  const [candidateForm, setCandidateForm] = useState(initialCandidateForm);
+
+  // Cálculo automático de idade a partir da data de nascimento
+  const calculateAge = (birthDateStr: string | undefined | null): number | null => {
+    if (!birthDateStr) return null;
+    const parts = birthDateStr.split('-');
+    if (parts.length !== 3) return null;
+    const birth = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    if (isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age >= 0 && age < 125 ? age : null;
+  };
+
+  // Candidatos filtrados por pesquisa, status e função
+  const filteredCandidates = useMemo(() => {
+    const list = state.candidates || [];
+    return list.filter(c => {
+      const q = candidateSearchText.toLowerCase().trim();
+      const nameMatch = !q || 
+        c.name.toLowerCase().includes(q) || 
+        (c.experience && c.experience.toLowerCase().includes(q)) || 
+        (c.address && c.address.toLowerCase().includes(q)) ||
+        (c.desiredRole && c.desiredRole.toLowerCase().includes(q)) ||
+        (c.observations && c.observations.toLowerCase().includes(q));
+
+      const statusMatch = candidateStatusFilter === 'ALL' || c.status === candidateStatusFilter;
+      const roleMatch = candidateRoleFilter === 'ALL' || c.desiredRole === candidateRoleFilter;
+
+      return nameMatch && statusMatch && roleMatch;
+    });
+  }, [state.candidates, candidateSearchText, candidateStatusFilter, candidateRoleFilter]);
+
+  const handleSaveCandidate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!candidateForm.name || !candidateForm.name.trim()) {
+      return notify("Nome do candidato é obrigatório", "error");
+    }
+    if (!candidateForm.birthDate) {
+      return notify("Data de nascimento é obrigatória", "error");
+    }
+
+    setIsLoading(true);
+    try {
+      if (!state.currentUser?.companyId) {
+        throw new Error("Empresa não identificada");
+      }
+
+      await dbSave('candidates', {
+        id: editingCandidateId || undefined,
+        companyId: state.currentUser.companyId,
+        name: candidateForm.name.trim().toUpperCase(),
+        birthDate: candidateForm.birthDate,
+        phone: candidateForm.phone || null,
+        address: candidateForm.address ? candidateForm.address.trim().toUpperCase() : null,
+        experience: candidateForm.experience ? candidateForm.experience.trim().toUpperCase() : null,
+        observations: candidateForm.observations ? candidateForm.observations.trim().toUpperCase() : null,
+        desiredRole: candidateForm.desiredRole ? candidateForm.desiredRole.trim().toUpperCase() : null,
+        status: candidateForm.status || 'banco_talentos'
+      });
+
+      await refreshData();
+      setShowCandidateModal(false);
+      setEditingCandidateId(null);
+      setCandidateForm(initialCandidateForm);
+      notify(editingCandidateId ? "Candidato atualizado com sucesso!" : "Candidato registrado no banco de dados!");
+    } catch (err) {
+      notify("Erro ao salvar candidato", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditCandidate = (cand: Candidate) => {
+    setEditingCandidateId(cand.id);
+    setCandidateForm({
+      name: cand.name,
+      birthDate: cand.birthDate || '',
+      phone: cand.phone || '',
+      address: cand.address || '',
+      experience: cand.experience || '',
+      observations: cand.observations || '',
+      desiredRole: cand.desiredRole || '',
+      status: cand.status || 'banco_talentos'
+    });
+    setShowCandidateModal(true);
+  };
+
+  const handleDeleteCandidate = async () => {
+    if (!candidateToDelete) return;
+    setIsLoading(true);
+    try {
+      await dbDelete('candidates', candidateToDelete.id);
+      await refreshData();
+      notify("Candidato removido do banco de dados!");
+    } catch (err) {
+      notify("Erro ao remover candidato", "error");
+    } finally {
+      setIsLoading(false);
+      setCandidateToDelete(null);
+    }
+  };
+
+  const handleHireCandidate = (cand: Candidate) => {
+    setEditingId(null);
+    setEmployeeForm({
+      ...initialFormState,
+      name: cand.name,
+      phone: cand.phone ? formatPhone(cand.phone) : '',
+      address: cand.address || '',
+      role: cand.desiredRole || '',
+      admissionDate: new Date().toISOString().split('T')[0]
+    });
+    setRhTab('team');
+    setShowForm(true);
+    notify(`Dados de ${cand.name} importados! Preencha CPF, Chave PIX e valor da diária para contratar.`);
+  };
 
   const refreshData = async () => {
     if (state.currentUser?.companyId) {
@@ -554,213 +704,549 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     <div className="space-y-6 pb-24">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-xl font-black text-[#0c2a1c] uppercase tracking-tight">Equipe & Frequência</h2>
-          <p className="text-[10px] text-[#4b6f34] font-bold uppercase tracking-widest mt-1">Gestão de Pessoal e Presença Forttiva</p>
+          <h2 className="text-xl font-black text-[#0c2a1c] uppercase tracking-tight">
+            {rhTab === 'team' ? 'Equipe & Frequência' : 'Banco de Candidatos & Talentos'}
+          </h2>
+          <p className="text-[10px] text-[#4b6f34] font-bold uppercase tracking-widest mt-1">
+            {rhTab === 'team' ? 'Gestão de Pessoal e Presença Forttiva' : 'Banco de Dados para Consultas e Futuras Contratações'}
+          </p>
         </div>
-        <div className="flex gap-2 w-full md:w-auto">
-          <button onClick={() => setShowInactive(!showInactive)} className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[9px] uppercase transition-all shadow-sm hover:border-[#7ea24e] truncate">
-             {showInactive ? 'Filtrar Ativos' : 'Exibir Todos'}
-          </button>
-          <button onClick={() => { setEditingId(null); setEmployeeForm(initialFormState); setShowForm(true); }} className="flex-1 md:flex-none bg-[#0c2a1c] text-white px-5 py-3 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-[#16462d] transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0">
-             <UserPlus size={16}/> Novo Cadastro
-          </button>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Alternador de Abas de RH: Equipe vs Banco de Candidatos */}
+          <div className="flex bg-slate-200/80 p-1 rounded-2xl w-full sm:w-auto">
+            <button 
+              type="button"
+              onClick={() => setRhTab('team')} 
+              className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all ${
+                rhTab === 'team' 
+                  ? 'bg-[#0c2a1c] text-white shadow-md' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users size={15}/>
+              <span>Equipe & Frequência</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setRhTab('candidates')} 
+              className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all ${
+                rhTab === 'candidates' 
+                  ? 'bg-[#16462d] text-white shadow-md' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserRoundSearch size={15}/>
+              <span>Banco de Candidatos</span>
+            </button>
+          </div>
+
+          {rhTab === 'team' ? (
+            <>
+              <button onClick={() => setShowInactive(!showInactive)} className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[9px] uppercase transition-all shadow-sm hover:border-[#7ea24e] truncate">
+                 {showInactive ? 'Filtrar Ativos' : 'Exibir Todos'}
+              </button>
+              <button onClick={() => { setEditingId(null); setEmployeeForm(initialFormState); setShowForm(true); }} className="flex-1 md:flex-none bg-[#0c2a1c] text-white px-5 py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-[#16462d] transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0">
+                 <UserPlus size={16}/> Novo Cadastro
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={() => {
+                setEditingCandidateId(null);
+                setCandidateForm(initialCandidateForm);
+                setShowCandidateModal(true);
+              }} 
+              className="w-full sm:w-auto bg-[#16462d] text-white px-5 py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-[#23633c] transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0"
+            >
+              <UserPlus size={16}/> Cadastrar Candidato
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Subtotais de Fechamento do Mês em Visualização */}
-      <div className="bg-white p-5 md:p-6 rounded-[32px] border border-slate-200/90 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#0c2a1c] text-[#9bb779] flex items-center justify-center shadow-xs shrink-0">
-              <Calendar size={20} />
+      {rhTab === 'team' ? (
+        <>
+          {/* Subtotais de Fechamento do Mês em Visualização */}
+          <div className="bg-white p-5 md:p-6 rounded-[32px] border border-slate-200/90 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#0c2a1c] text-[#9bb779] flex items-center justify-center shadow-xs shrink-0">
+                  <Calendar size={20} />
+                </div>
+                <div>
+                  <span className="text-[9px] font-black text-[#4b6f34] uppercase tracking-widest block">
+                    Fechamento do Mês em Visualização
+                  </span>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight">
+                    {currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                  </h3>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button 
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                  title="Mês Anterior"
+                >
+                  <ChevronLeft size={14} /> Mês Anterior
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleCurrentMonth}
+                  className="px-3 py-1.5 bg-[#eaf0e3] hover:bg-[#d8e4cd] text-[#16462d] border border-[#7ea24e]/30 rounded-xl font-black text-[9px] uppercase transition-all shadow-xs cursor-pointer active:scale-95"
+                  title="Mês Atual"
+                >
+                  Hoje
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                  title="Próximo Mês"
+                >
+                  Próximo <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
-            <div>
-              <span className="text-[9px] font-black text-[#4b6f34] uppercase tracking-widest block">
-                Fechamento do Mês em Visualização
+
+            {/* Subtotais: Já Pago, Devendo (A Pagar) e Fechamento Total */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Subtotal Já Pago */}
+              <div className="bg-gradient-to-br from-emerald-50/90 to-emerald-50/40 p-5 rounded-2xl border border-emerald-200/80 shadow-xs flex items-center gap-4 transition-all">
+                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                   <CheckCircle2 size={24} />
+                 </div>
+                 <div className="min-w-0">
+                    <p className="text-[9px] font-black text-emerald-800 uppercase tracking-wider mb-0.5 truncate">
+                      Subtotal Já Pago
+                    </p>
+                    <h4 className="text-2xl font-black text-emerald-950 tracking-tight truncate">
+                      {formatMoney(monthSummary.paid)}
+                    </h4>
+                    <p className="text-[8px] font-bold text-emerald-700/80 uppercase tracking-widest mt-0.5">
+                      Quitado em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
+                    </p>
+                 </div>
+              </div>
+
+              {/* Subtotal Devendo (Pendente) */}
+              <div className="bg-gradient-to-br from-amber-50/90 to-amber-50/40 p-5 rounded-2xl border border-amber-200/80 shadow-xs flex items-center gap-4 transition-all">
+                 <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                   <Wallet size={24} />
+                 </div>
+                 <div className="min-w-0">
+                    <p className="text-[9px] font-black text-amber-800 uppercase tracking-wider mb-0.5 truncate">
+                      Subtotal Devendo (A Pagar)
+                    </p>
+                    <h4 className="text-2xl font-black text-amber-950 tracking-tight truncate">
+                      {formatMoney(monthSummary.pending)}
+                    </h4>
+                    <p className="text-[8px] font-bold text-amber-700/80 uppercase tracking-widest mt-0.5">
+                      Em aberto em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
+                    </p>
+                 </div>
+              </div>
+
+              {/* Fechamento Consolidado do Mês */}
+              <div className="bg-[#0c2a1c] p-5 rounded-2xl border border-[#7ea24e]/30 shadow-md flex items-center gap-4 transition-all text-white">
+                 <div className="w-12 h-12 bg-white/10 text-[#9bb779] rounded-2xl flex items-center justify-center shadow-inner shrink-0">
+                   <DollarSign size={24} />
+                 </div>
+                 <div className="min-w-0">
+                    <p className="text-[9px] font-black text-[#9bb779] uppercase tracking-wider mb-0.5 truncate">
+                      Fechamento do Mês ({currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()})
+                    </p>
+                    <h4 className="text-2xl font-black text-white tracking-tight truncate">
+                      {formatMoney(monthSummary.total)}
+                    </h4>
+                    <p className="text-[8px] font-bold text-white/60 uppercase tracking-widest mt-0.5">
+                      Total consolidado do período
+                    </p>
+                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+            <div className="p-4 md:p-6 border-b bg-slate-50 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <button onClick={handlePrevMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Mês Anterior"><ChevronLeft size={18} /></button>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">{currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}</h3>
+                <button onClick={handleNextMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Próximo Mês"><ChevronRight size={18} /></button>
+              </div>
+              
+              {/* Legenda Atualizada: Apenas Presença, Falta e Meia Diária com suas letras e cores */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Legenda:</span>
+                 <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
+                   <span className="w-5 h-5 rounded-md bg-emerald-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">P</span>
+                   <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider">Presença</span>
+                 </div>
+                 <div className="inline-flex items-center gap-1.5 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-xl">
+                   <span className="w-5 h-5 rounded-md bg-rose-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">F</span>
+                   <span className="text-[9px] font-black uppercase text-rose-800 tracking-wider">Falta</span>
+                 </div>
+                 <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl">
+                   <span className="w-5 h-5 rounded-md bg-amber-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">½</span>
+                   <span className="text-[9px] font-black uppercase text-amber-800 tracking-wider">Meia Diária</span>
+                 </div>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto scrollbar-hide">
+              <table className="w-full min-w-[1000px] md:min-w-[800px] border-collapse">
+                <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase border-b">
+                  <tr>
+                    <th className="sticky left-0 z-20 bg-slate-50 p-3 md:p-4 text-left border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] min-w-[140px] md:min-w-[220px]">Colaborador</th>
+                    {calendarDays.map(day => {
+                       const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                       const isToday = dateStr === new Date().toISOString().split('T')[0];
+                       return (
+                         <th key={day} className="p-1 md:p-2 text-center border-r min-w-[44px] md:min-w-[34px]">
+                           <span className={`inline-flex items-center justify-center w-8 h-8 md:w-7 md:h-7 rounded-lg transition-all ${isToday ? 'bg-blue-600 text-white shadow-md' : ''}`}>
+                            {day}
+                           </span>
+                         </th>
+                       );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredEmployees.map(emp => (
+                    <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors group ${emp.status === 'inactive' ? 'opacity-50' : ''}`}>
+                      <td className="sticky left-0 z-10 bg-white p-3 md:p-4 border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-2">
+                          <div className="min-w-0">
+                            <p onClick={() => setSelectedEmployeeFinance(emp)} className={`text-[9px] md:text-[10px] font-black uppercase truncate flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors ${emp.status === 'inactive' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                              {emp.paymentModality === 'CLT' && <Clock size={10} className="text-blue-500" />}
+                              {emp.name}
+                            </p>
+                            <p className="text-[7px] md:text-[8px] text-slate-400 font-bold uppercase truncate">{emp.role}</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleEdit(emp)} className="p-1 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={10}/></button>
+                            <button onClick={() => setConfirmStatusToggle(emp)} className={`p-1 rounded-lg ${emp.status === 'active' ? 'text-rose-400 hover:bg-rose-50' : 'text-emerald-500 hover:bg-emerald-50'}`} title={emp.status === 'active' ? 'Desativar' : 'Ativar'}><Power size={10}/></button>
+                          </div>
+                        </div>
+                      </td>
+                      {calendarDays.map(day => {
+                        const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const att = state.attendanceRecords.find(r => r.employeeId === emp.id && r.date === dateStr);
+                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                        const virtualStatus = att ? getVirtualStatus(att) : null;
+                        let bgColor = 'text-slate-200 hover:bg-slate-100';
+                        if (att) {
+                            switch(virtualStatus) {
+                              case 'present': bgColor = 'bg-emerald-600 text-white shadow-inner font-black'; break;
+                              case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner font-black'; break;
+                              case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner font-black'; break;
+                              case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner font-black'; break;
+                              case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner font-black'; break;
+                              case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner font-black'; break;
+                            }
+                        } else if (isToday) {
+                            bgColor = 'bg-blue-50/40 text-blue-500 font-bold';
+                        }
+                        return (
+                          <td key={day} onClick={() => handleToggleAttendance(emp.id, dateStr)} className={`p-0 border-r h-12 md:h-10 text-center text-[10px] font-black transition-all cursor-pointer active:scale-95 ${bgColor}`}>
+                            {getAttendanceLabel(att, emp)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ========================================================================= */
+        /* ABA: BANCO DE CANDIDATOS (CURRÍCULOS & TALENTOS PARA CONTRATAÇÃO)         */
+        /* ========================================================================= */
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Métricas do Banco de Candidatos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total no Banco</span>
+                <p className="text-2xl font-black text-[#0c2a1c] mt-1">{(state.candidates || []).length}</p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-[#0c2a1c]/5 text-[#16462d] flex items-center justify-center">
+                <Users size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Disponíveis / Banco</span>
+                <p className="text-2xl font-black text-blue-600 mt-1">
+                  {(state.candidates || []).filter(c => c.status === 'banco_talentos' || !c.status).length}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Sparkles size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Em Triagem / Entrevista</span>
+                <p className="text-2xl font-black text-amber-600 mt-1">
+                  {(state.candidates || []).filter(c => c.status === 'em_analise' || c.status === 'entrevistado').length}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Clock size={22} />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Aprovados / Efetivados</span>
+                <p className="text-2xl font-black text-emerald-600 mt-1">
+                  {(state.candidates || []).filter(c => c.status === 'aprovado' || c.status === 'contratado').length}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 size={22} />
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de Filtros e Pesquisa */}
+          <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative w-full md:w-96">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text"
+                placeholder="BUSCAR POR NOME, EXPERIÊNCIA, BAIRRO OU CARGO..."
+                value={candidateSearchText}
+                onChange={e => setCandidateSearchText(e.target.value)}
+                className="w-full bg-slate-50 border-2 border-slate-100 pl-11 pr-4 py-3 rounded-2xl text-xs font-black uppercase outline-none focus:bg-white focus:border-[#16462d] transition-all placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+              {/* Filtro por Status */}
+              <select 
+                value={candidateStatusFilter}
+                onChange={e => setCandidateStatusFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-[#16462d]"
+              >
+                <option value="ALL">STATUS: TODOS</option>
+                <option value="banco_talentos">BANCO DE TALENTOS</option>
+                <option value="em_analise">EM ANÁLISE / TRIAGEM</option>
+                <option value="entrevistado">ENTREVISTADO</option>
+                <option value="aprovado">APROVADO</option>
+                <option value="contratado">CONTRATADO</option>
+                <option value="descartado">ARQUIVADO / DESCARTADO</option>
+              </select>
+
+              {/* Filtro por Cargo */}
+              <select 
+                value={candidateRoleFilter}
+                onChange={e => setCandidateRoleFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-[#16462d]"
+              >
+                <option value="ALL">CARGO PRETENDIDO: TODOS</option>
+                {state.employeeRoles.map(role => (
+                  <option key={role} value={role}>{role.toUpperCase()}</option>
+                ))}
+              </select>
+
+              <button 
+                onClick={() => {
+                  setEditingCandidateId(null);
+                  setCandidateForm(initialCandidateForm);
+                  setShowCandidateModal(true);
+                }}
+                className="bg-[#16462d] hover:bg-[#23633c] text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95"
+              >
+                <UserPlus size={16}/> CADASTRAR CANDIDATO
+              </button>
+            </div>
+          </div>
+
+          {/* Lista / Tabela de Candidatos */}
+          <div className="bg-white rounded-[32px] border border-slate-200/80 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Users size={16} className="text-[#16462d]"/> 
+                Candidatos Cadastrados ({filteredCandidates.length})
               </span>
-              <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight">
-                {currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
-              </h3>
+              <span className="text-[9px] font-bold text-slate-400 uppercase">
+                Idade calculada automaticamente a partir da data de nascimento
+              </span>
             </div>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button 
-              type="button"
-              onClick={handlePrevMonth}
-              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
-              title="Mês Anterior"
-            >
-              <ChevronLeft size={14} /> Mês Anterior
-            </button>
-            <button 
-              type="button"
-              onClick={handleCurrentMonth}
-              className="px-3 py-1.5 bg-[#eaf0e3] hover:bg-[#d8e4cd] text-[#16462d] border border-[#7ea24e]/30 rounded-xl font-black text-[9px] uppercase transition-all shadow-xs cursor-pointer active:scale-95"
-              title="Mês Atual"
-            >
-              Hoje
-            </button>
-            <button 
-              type="button"
-              onClick={handleNextMonth}
-              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-black text-[9px] uppercase transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
-              title="Próximo Mês"
-            >
-              Próximo <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
 
-        {/* Subtotais: Já Pago, Devendo (A Pagar) e Fechamento Total */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Subtotal Já Pago */}
-          <div className="bg-gradient-to-br from-emerald-50/90 to-emerald-50/40 p-5 rounded-2xl border border-emerald-200/80 shadow-xs flex items-center gap-4 transition-all">
-             <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
-               <CheckCircle2 size={24} />
-             </div>
-             <div className="min-w-0">
-                <p className="text-[9px] font-black text-emerald-800 uppercase tracking-wider mb-0.5 truncate">
-                  Subtotal Já Pago
-                </p>
-                <h4 className="text-2xl font-black text-emerald-950 tracking-tight truncate">
-                  {formatMoney(monthSummary.paid)}
-                </h4>
-                <p className="text-[8px] font-bold text-emerald-700/80 uppercase tracking-widest mt-0.5">
-                  Quitado em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
-                </p>
-             </div>
-          </div>
+            {filteredCandidates.length === 0 ? (
+              <div className="p-16 text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+                  <UserRoundSearch size={32} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-700 uppercase">Nenhum candidato encontrado</h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    {candidateSearchText || candidateStatusFilter !== 'ALL' || candidateRoleFilter !== 'ALL'
+                      ? 'Nenhum resultado corresponde aos filtros aplicados. Tente limpar os filtros de busca.'
+                      : 'Cadastre candidatos com dados de nascimento, endereço e experiência profissional para formar seu banco de talentos.'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setEditingCandidateId(null);
+                    setCandidateForm(initialCandidateForm);
+                    setShowCandidateModal(true);
+                  }}
+                  className="bg-[#0c2a1c] text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-wider hover:bg-[#16462d] transition-all"
+                >
+                  <Plus size={15} className="inline mr-1"/> Cadastrar Primeiro Candidato
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredCandidates.map(cand => {
+                  const age = calculateAge(cand.birthDate);
+                  const statusColors: Record<string, string> = {
+                    banco_talentos: 'bg-blue-50 text-blue-700 border-blue-200',
+                    em_analise: 'bg-amber-50 text-amber-700 border-amber-200',
+                    entrevistado: 'bg-purple-50 text-purple-700 border-purple-200',
+                    aprovado: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                    contratado: 'bg-green-100 text-green-900 border-green-300 font-black',
+                    descartado: 'bg-slate-100 text-slate-600 border-slate-200'
+                  };
 
-          {/* Subtotal Devendo (Pendente) */}
-          <div className="bg-gradient-to-br from-amber-50/90 to-amber-50/40 p-5 rounded-2xl border border-amber-200/80 shadow-xs flex items-center gap-4 transition-all">
-             <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
-               <Wallet size={24} />
-             </div>
-             <div className="min-w-0">
-                <p className="text-[9px] font-black text-amber-800 uppercase tracking-wider mb-0.5 truncate">
-                  Subtotal Devendo (A Pagar)
-                </p>
-                <h4 className="text-2xl font-black text-amber-950 tracking-tight truncate">
-                  {formatMoney(monthSummary.pending)}
-                </h4>
-                <p className="text-[8px] font-bold text-amber-700/80 uppercase tracking-widest mt-0.5">
-                  Em aberto em {currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
-                </p>
-             </div>
-          </div>
+                  const statusLabels: Record<string, string> = {
+                    banco_talentos: 'BANCO DE TALENTOS',
+                    em_analise: 'EM ANÁLISE / TRIAGEM',
+                    entrevistado: 'ENTREVISTADO',
+                    aprovado: 'APROVADO',
+                    contratado: 'CONTRATADO',
+                    descartado: 'ARQUIVADO'
+                  };
 
-          {/* Fechamento Consolidado do Mês */}
-          <div className="bg-[#0c2a1c] p-5 rounded-2xl border border-[#7ea24e]/30 shadow-md flex items-center gap-4 transition-all text-white">
-             <div className="w-12 h-12 bg-white/10 text-[#9bb779] rounded-2xl flex items-center justify-center shadow-inner shrink-0">
-               <DollarSign size={24} />
-             </div>
-             <div className="min-w-0">
-                <p className="text-[9px] font-black text-[#9bb779] uppercase tracking-wider mb-0.5 truncate">
-                  Fechamento do Mês ({currentCalendarDate.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()})
-                </p>
-                <h4 className="text-2xl font-black text-white tracking-tight truncate">
-                  {formatMoney(monthSummary.total)}
-                </h4>
-                <p className="text-[8px] font-bold text-white/60 uppercase tracking-widest mt-0.5">
-                  Total consolidado do período
-                </p>
-             </div>
-          </div>
-        </div>
-      </div>
+                  return (
+                    <div key={cand.id} className="p-6 hover:bg-slate-50/60 transition-colors space-y-4">
+                      {/* Topo do Card de Candidato */}
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-[#0c2a1c] text-[#9bb779] flex items-center justify-center font-black text-base shadow-sm shrink-0">
+                            {cand.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                {cand.name}
+                              </h4>
+                              {cand.desiredRole && (
+                                <span className="text-[9px] font-bold text-[#16462d] bg-[#ded5c4]/40 px-2.5 py-0.5 rounded-lg uppercase">
+                                  {cand.desiredRole}
+                                </span>
+                              )}
+                              <span className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-lg border ${statusColors[cand.status] || 'bg-slate-100 text-slate-600'}`}>
+                                {statusLabels[cand.status] || cand.status}
+                              </span>
+                            </div>
+                            
+                            {/* Idade calculada automaticamente em destaque */}
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500 font-semibold">
+                              <span className="inline-flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md text-[10px] font-black border border-emerald-200">
+                                <Cake size={13} className="text-emerald-700"/>
+                                <span>
+                                  {cand.birthDate ? cand.birthDate.split('-').reverse().join('/') : '---'}
+                                </span>
+                                <strong className="text-emerald-950 font-black">
+                                  ({age !== null ? `${age} anos` : 'Idade a calcular'})
+                                </strong>
+                              </span>
 
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
-        <div className="p-4 md:p-6 border-b bg-slate-50 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={handlePrevMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Mês Anterior"><ChevronLeft size={18} /></button>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">{currentCalendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}</h3>
-            <button onClick={handleNextMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Próximo Mês"><ChevronRight size={18} /></button>
-          </div>
-          
-          {/* Legenda Atualizada: Apenas Presença, Falta e Meia Diária com suas letras e cores */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Legenda:</span>
-             <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
-               <span className="w-5 h-5 rounded-md bg-emerald-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">P</span>
-               <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider">Presença</span>
-             </div>
-             <div className="inline-flex items-center gap-1.5 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-xl">
-               <span className="w-5 h-5 rounded-md bg-rose-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">F</span>
-               <span className="text-[9px] font-black uppercase text-rose-800 tracking-wider">Falta</span>
-             </div>
-             <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl">
-               <span className="w-5 h-5 rounded-md bg-amber-500 text-white font-black flex items-center justify-center text-[10px] shadow-xs">½</span>
-               <span className="text-[9px] font-black uppercase text-amber-800 tracking-wider">Meia Diária</span>
-             </div>
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto scrollbar-hide">
-          <table className="w-full min-w-[1000px] md:min-w-[800px] border-collapse">
-            <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase border-b">
-              <tr>
-                <th className="sticky left-0 z-20 bg-slate-50 p-3 md:p-4 text-left border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] min-w-[140px] md:min-w-[220px]">Colaborador</th>
-                {calendarDays.map(day => {
-                   const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                   const isToday = dateStr === new Date().toISOString().split('T')[0];
-                   return (
-                     <th key={day} className="p-1 md:p-2 text-center border-r min-w-[44px] md:min-w-[34px]">
-                       <span className={`inline-flex items-center justify-center w-8 h-8 md:w-7 md:h-7 rounded-lg transition-all ${isToday ? 'bg-blue-600 text-white shadow-md' : ''}`}>
-                        {day}
-                       </span>
-                     </th>
-                   );
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredEmployees.map(emp => (
-                <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors group ${emp.status === 'inactive' ? 'opacity-50' : ''}`}>
-                  <td className="sticky left-0 z-10 bg-white p-3 md:p-4 border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-2">
-                      <div className="min-w-0">
-                        <p onClick={() => setSelectedEmployeeFinance(emp)} className={`text-[9px] md:text-[10px] font-black uppercase truncate flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors ${emp.status === 'inactive' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                          {emp.paymentModality === 'CLT' && <Clock size={10} className="text-blue-500" />}
-                          {emp.name}
-                        </p>
-                        <p className="text-[7px] md:text-[8px] text-slate-400 font-bold uppercase truncate">{emp.role}</p>
+                              {cand.phone && (
+                                <a 
+                                  href={`tel:${cand.phone.replace(/\D/g, '')}`} 
+                                  className="inline-flex items-center gap-1 text-slate-700 hover:text-blue-600 text-[11px] font-bold bg-slate-100 px-2.5 py-0.5 rounded-md"
+                                  title="Ligar ou enviar mensagem"
+                                >
+                                  <Smartphone size={13} className="text-slate-500"/> {cand.phone}
+                                </a>
+                              )}
+
+                              {cand.address && (
+                                <span className="inline-flex items-center gap-1 text-slate-500 text-[11px]">
+                                  <MapPin size={13} className="text-slate-400 shrink-0"/> {cand.address}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação do Candidato */}
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          {/* Botão de Contratação / Efetivação */}
+                          <button
+                            type="button"
+                            onClick={() => handleHireCandidate(cand)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl font-black text-[9px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                            title="Contratar candidato: migra dados para o cadastro de colaborador"
+                          >
+                            <CheckCircle2 size={13} />
+                            <span>CONTRATAR</span>
+                          </button>
+
+                          {/* Botão de Editar */}
+                          <button
+                            type="button"
+                            onClick={() => handleEditCandidate(cand)}
+                            className="p-2 text-slate-600 hover:text-[#0c2a1c] bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                            title="Editar dados do candidato"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+
+                          {/* Botão de Excluir */}
+                          <button
+                            type="button"
+                            onClick={() => setCandidateToDelete(cand)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                            title="Excluir candidato"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleEdit(emp)} className="p-1 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={10}/></button>
-                        <button onClick={() => setConfirmStatusToggle(emp)} className={`p-1 rounded-lg ${emp.status === 'active' ? 'text-rose-400 hover:bg-rose-50' : 'text-emerald-500 hover:bg-emerald-50'}`} title={emp.status === 'active' ? 'Desativar' : 'Ativar'}><Power size={10}/></button>
+
+                      {/* Bloco de Experiência e Observações */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        {/* Experiência */}
+                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[9px] font-black uppercase text-[#16462d] tracking-wider flex items-center gap-1.5">
+                            <Briefcase size={12}/> Experiência Profissional
+                          </span>
+                          <p className="text-xs text-slate-700 font-semibold leading-relaxed uppercase whitespace-pre-line">
+                            {cand.experience || 'Nenhuma experiência anterior detalhada.'}
+                          </p>
+                        </div>
+
+                        {/* Observações */}
+                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                            <FileText size={12}/> Observações & Anotações
+                          </span>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed uppercase whitespace-pre-line">
+                            {cand.observations || 'Nenhuma anotação adicional informada.'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </td>
-                  {calendarDays.map(day => {
-                    const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const att = state.attendanceRecords.find(r => r.employeeId === emp.id && r.date === dateStr);
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
-                    const virtualStatus = att ? getVirtualStatus(att) : null;
-                    let bgColor = 'text-slate-200 hover:bg-slate-100';
-                    if (att) {
-                        switch(virtualStatus) {
-                          case 'present': bgColor = 'bg-emerald-600 text-white shadow-inner font-black'; break;
-                          case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner font-black'; break;
-                          case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner font-black'; break;
-                          case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner font-black'; break;
-                          case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner font-black'; break;
-                          case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner font-black'; break;
-                        }
-                    } else if (isToday) {
-                        bgColor = 'bg-blue-50/40 text-blue-500 font-bold';
-                    }
-                    return (
-                      <td key={day} onClick={() => handleToggleAttendance(emp.id, dateStr)} className={`p-0 border-r h-12 md:h-10 text-center text-[10px] font-black transition-all cursor-pointer active:scale-95 ${bgColor}`}>
-                        {getAttendanceLabel(att, emp)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
@@ -1096,6 +1582,223 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CADASTRO / EDIÇÃO DE CANDIDATO (BANCO DE TALENTOS)                 */}
+      {/* ========================================================================= */}
+      {showCandidateModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleSaveCandidate} 
+            className="bg-white rounded-[40px] w-full max-w-2xl p-8 md:p-10 space-y-6 shadow-2xl overflow-y-auto max-h-[95vh] border border-slate-100 animate-in zoom-in-95"
+          >
+            <div className="flex justify-between items-center border-b pb-5">
+              <div>
+                <h3 className="text-base font-black uppercase text-[#0c2a1c] tracking-tight flex items-center gap-2">
+                  <UserRoundSearch size={20} className="text-[#16462d]"/>
+                  {editingCandidateId ? 'Editar Cadastro do Candidato' : 'Novo Candidato • Banco de Talentos'}
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                  Banco de Dados para Consultas e Futuras Contratações Forttiva
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowCandidateModal(false);
+                  setEditingCandidateId(null);
+                }} 
+                className="text-slate-400 hover:text-slate-900 p-2"
+              >
+                <X size={22}/>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Nome Completo */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block">
+                  Nome Completo do Candidato *
+                </label>
+                <input 
+                  required 
+                  className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                  placeholder="EX: CARLOS ALBERTO DE OLIVEIRA" 
+                  value={candidateForm.name} 
+                  onChange={e => setCandidateForm({...candidateForm, name: e.target.value})} 
+                />
+              </div>
+
+              {/* Data de Nascimento e Idade Calculada Automaticamente */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#16462d]"/> Data de Nascimento *
+                  </label>
+                  <input 
+                    type="date"
+                    required 
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                    value={candidateForm.birthDate} 
+                    onChange={e => setCandidateForm({...candidateForm, birthDate: e.target.value})} 
+                  />
+                </div>
+
+                {/* Exibição da Idade Calculada em Tempo Real */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1 block">
+                    Idade Calculada (Automática)
+                  </label>
+                  <div className={`p-4 rounded-2xl border-2 flex items-center gap-2.5 transition-all ${
+                    calculateAge(candidateForm.birthDate) !== null 
+                      ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-black' 
+                      : 'bg-slate-50 border-slate-200 text-slate-400 font-bold'
+                  }`}>
+                    <Cake size={18} className={calculateAge(candidateForm.birthDate) !== null ? 'text-emerald-700' : 'text-slate-300'} />
+                    <span className="text-xs uppercase">
+                      {calculateAge(candidateForm.birthDate) !== null 
+                        ? `${calculateAge(candidateForm.birthDate)} ANOS DE IDADE` 
+                        : 'Informe a data para calcular'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Telefone e Vaga Pretendida */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                    <Smartphone size={13} className="text-[#16462d]"/> Telefone / WhatsApp
+                  </label>
+                  <input 
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                    placeholder="(00) 00000-0000" 
+                    value={candidateForm.phone} 
+                    onChange={e => setCandidateForm({...candidateForm, phone: formatPhone(e.target.value)})} 
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                    <Briefcase size={13} className="text-[#16462d]"/> Cargo / Função Pretendida
+                  </label>
+                  <select 
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                    value={candidateForm.desiredRole} 
+                    onChange={e => setCandidateForm({...candidateForm, desiredRole: e.target.value})}
+                  >
+                    <option value="">SELECIONE UM CARGO...</option>
+                    {state.employeeRoles.map(role => (
+                      <option key={role} value={role}>{role.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Endereço Residencial */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                  <MapPin size={13} className="text-[#16462d]"/> Endereço Residencial
+                </label>
+                <input 
+                  className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                  placeholder="EX: RUA DAS FLORES, 123, BAIRRO CENTRO - CIDADE / UF" 
+                  value={candidateForm.address} 
+                  onChange={e => setCandidateForm({...candidateForm, address: e.target.value})} 
+                />
+              </div>
+
+              {/* Experiência Profissional */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                  <Award size={13} className="text-[#16462d]"/> Experiência Profissional & Habilidades
+                </label>
+                <textarea 
+                  rows={3}
+                  className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-medium uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm leading-relaxed" 
+                  placeholder="DESCREVA AS EMPRESAS ONDE JÁ TRABALHOU, TEMPO DE EXPERIÊNCIA, MÁQUINAS QUE OPERA (EX: ROÇADEIRA COSTAL STIHL, TRATOR, MOTOSSERRA), ETC..." 
+                  value={candidateForm.experience} 
+                  onChange={e => setCandidateForm({...candidateForm, experience: e.target.value})} 
+                />
+              </div>
+
+              {/* Observações & Status no Banco */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block flex items-center gap-1.5">
+                    <FileText size={13} className="text-[#16462d]"/> Observações & Anotações
+                  </label>
+                  <textarea 
+                    rows={2}
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-medium uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm leading-relaxed" 
+                    placeholder="DISPONIBILIDADE DE HORÁRIO, QUEM INDICOU, IMPRESSÕES DA ENTREVISTA..." 
+                    value={candidateForm.observations} 
+                    onChange={e => setCandidateForm({...candidateForm, observations: e.target.value})} 
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1 block">
+                    Status no Banco
+                  </label>
+                  <select 
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl text-xs font-black uppercase outline-none focus:bg-white focus:border-[#16462d] shadow-sm" 
+                    value={candidateForm.status} 
+                    onChange={e => setCandidateForm({...candidateForm, status: e.target.value as any})}
+                  >
+                    <option value="banco_talentos">BANCO DE TALENTOS</option>
+                    <option value="em_analise">EM ANÁLISE / TRIAGEM</option>
+                    <option value="entrevistado">ENTREVISTADO</option>
+                    <option value="aprovado">APROVADO</option>
+                    <option value="contratado">CONTRATADO</option>
+                    <option value="descartado">ARQUIVADO</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Aviso Conforme Solicitado: CPF e Chave PIX permanecem na aba de Equipe */}
+              <div className="p-4 bg-slate-100 rounded-2xl border border-slate-200/80 flex items-start gap-3">
+                <AlertCircle size={16} className="text-[#16462d] shrink-0 mt-0.5" />
+                <p className="text-[10px] font-semibold text-slate-600 leading-relaxed">
+                  <strong>Aviso:</strong> Os campos de <strong>CPF</strong> e <strong>Chave PIX</strong> permanecem exclusivamente na aba de <strong>Equipe</strong> e serão informados no momento da contratação e admissão.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowCandidateModal(false);
+                  setEditingCandidateId(null);
+                }} 
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-4 rounded-2xl font-black uppercase text-[10px] tracking-wider transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                disabled={isLoading} 
+                type="submit" 
+                className="flex-1 bg-[#16462d] hover:bg-[#23633c] text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-wider shadow-xl transition-all flex items-center justify-center gap-2"
+              >
+                {isLoading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                SALVAR CANDIDATO
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal de Confirmação para Remoção de Candidato */}
+      <ConfirmationModal 
+        isOpen={!!candidateToDelete} 
+        onClose={() => setCandidateToDelete(null)} 
+        onConfirm={handleDeleteCandidate} 
+        title="Remover Candidato do Banco" 
+        message={`Deseja realmente remover o candidato "${candidateToDelete?.name}" do banco de talentos?`}
+        confirmText="Remover"
+        type="danger"
+      />
     </div>
   );
 };

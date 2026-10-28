@@ -6,6 +6,7 @@ export const INITIAL_STATE: AppState = {
     { id: 'e1', companyId: 'forttiva-main', name: 'João Silva', role: 'Operador de Roçadeira', status: 'active', defaultValue: 85.00, paymentModality: 'DIARIA' },
     { id: 'e2', companyId: 'forttiva-main', name: 'Maria Santos', role: 'Ajudante Geral', status: 'active', defaultValue: 75.00, paymentModality: 'DIARIA' }
   ],
+  candidates: [],
   attendanceRecords: [],
   employeeTransactions: [],
   inventory: [

@@ -174,7 +174,7 @@ export const fetchCompleteCompanyData = async (companyId: string | null, isMaste
 
   const baseFilter = (q: any) => (!isMaster && companyId) ? q.eq('company_id', companyId) : q;
 
-  const [areas, emps, inv, exits, flow, att, trans, goals, support, dre, bills, recurring, companyInfo] = await Promise.all([
+  const [areas, emps, inv, exits, flow, att, trans, goals, support, dre, bills, recurring, companyInfo, candList] = await Promise.all([
     safeQuery('areas', baseFilter(supabase.from('areas').select('*, services(*)').order('created_at', { ascending: false }))),
     safeQuery('employees', baseFilter(supabase.from('employees').select('*').order('name'))),
     safeQuery('inventory', baseFilter(supabase.from('inventory').select('*').order('name'))),
@@ -187,7 +187,8 @@ export const fetchCompleteCompanyData = async (companyId: string | null, isMaste
     safeQuery('dre_statements', baseFilter(supabase.from('dre_statements').select('*'))),
     safeQuery('accounts_payable', baseFilter(supabase.from('accounts_payable').select('*').order('due_date', { ascending: true }))),
     safeQuery('dre_recurring_entries', baseFilter(supabase.from('dre_recurring_entries').select('*').order('created_at', { ascending: false }))),
-    companyId ? supabase.from('companies').select('*').eq('id', companyId).maybeSingle() : Promise.resolve({ data: null })
+    companyId ? supabase.from('companies').select('*').eq('id', companyId).maybeSingle() : Promise.resolve({ data: null }),
+    safeQuery('candidates', baseFilter(supabase.from('candidates').select('*').order('created_at', { ascending: false })))
   ]);
 
   const goalsMap: Record<string, any> = {};
@@ -314,6 +315,19 @@ export const fetchCompleteCompanyData = async (companyId: string | null, isMaste
       installmentNumber: b.installment_number ? Number(b.installment_number) : undefined,
       totalInstallments: b.total_installments ? Number(b.total_installments) : undefined,
       createdAt: b.created_at
+    })),
+    candidates: (candList || []).map((c: any) => ({
+      id: c.id,
+      companyId: c.company_id,
+      name: c.name,
+      birthDate: c.birth_date,
+      phone: c.phone || '',
+      address: c.address || '',
+      experience: c.experience || '',
+      observations: c.observations || '',
+      desiredRole: c.desired_role || '',
+      status: c.status || 'banco_talentos',
+      createdAt: c.created_at
     }))
   };
 };

@@ -432,3 +432,31 @@ FROM (VALUES
     ('Protetor Auricular Tipo Concha', 'EPIS', 14.00, 5.00, 20.00, 22.00)
 ) AS item(name, category, current_qty, min_qty, ideal_qty, unit_value)
 WHERE NOT EXISTS (SELECT 1 FROM public.inventory LIMIT 1);
+
+-- ==============================================================================
+-- 20. TABELA: CANDIDATES (Banco de Talentos / Candidatos para Contratação)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.candidates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    birth_date DATE NOT NULL,
+    phone TEXT,
+    address TEXT,
+    experience TEXT,
+    observations TEXT,
+    desired_role TEXT,
+    status TEXT DEFAULT 'banco_talentos', -- 'banco_talentos', 'em_analise', 'entrevistado', 'aprovado', 'contratado', 'descartado'
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Índices para consultas e filtros otimizados
+CREATE INDEX IF NOT EXISTS idx_candidates_company_id ON public.candidates(company_id);
+CREATE INDEX IF NOT EXISTS idx_candidates_status ON public.candidates(status);
+CREATE INDEX IF NOT EXISTS idx_candidates_name ON public.candidates(name);
+
+-- Habilitar RLS e Política de Acesso Total
+ALTER TABLE public.candidates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "candidates_all_policy" ON public.candidates;
+CREATE POLICY "candidates_all_policy" ON public.candidates FOR ALL USING (true) WITH CHECK (true);
+

@@ -97,6 +97,20 @@ export interface Employee {
   endTime?: string;
 }
 
+export interface Candidate {
+  id: string;
+  companyId: string;
+  name: string;
+  birthDate: string; // YYYY-MM-DD
+  phone?: string;
+  address?: string;
+  experience?: string;
+  observations?: string;
+  desiredRole?: string;
+  status: 'banco_talentos' | 'em_analise' | 'entrevistado' | 'aprovado' | 'contratado' | 'descartado';
+  createdAt?: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   companyId: string;
@@ -239,6 +253,7 @@ export interface AccountPayable {
 export interface AppState {
   areas: Area[];
   employees: Employee[];
+  candidates?: Candidate[];
   attendanceRecords: AttendanceRecord[];
   employeeTransactions: EmployeeTransaction[];
   inventory: InventoryItem[];
