@@ -44,7 +44,8 @@ const Settings: React.FC<SettingsProps> = ({ state, setState, notify }) => {
   const refreshData = async () => {
     const targetId = state.currentUser?.companyId;
     if (targetId) {
-      const data = await fetchCompleteCompanyData(targetId, state.currentUser?.role === 'DIRETORIA_MASTER');
+      const isMaster = state.currentUser?.role === 'DIRETORIA_MASTER' || (state.currentUser?.role as any) === 'ADMINISTRADOR' || (state.currentUser?.role as any) === 'MASTER';
+      const data = await fetchCompleteCompanyData(targetId, isMaster);
       if (data) setState(prev => ({ ...prev, ...data }));
     }
   };

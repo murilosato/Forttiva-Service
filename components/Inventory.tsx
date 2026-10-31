@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppState, InventoryItem, Employee } from '../types';
+import { AppState, InventoryItem, Employee, UserRole } from '../types';
 import { 
   Package, Plus, Search, X, Loader2, History, Trash2, Filter, 
   AlertTriangle, CheckCircle2, List, ArrowRightLeft, Edit2, 
@@ -65,6 +65,7 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
   const [modalWithdrawnBy, setModalWithdrawnBy] = useState(state.currentUser?.name || '');
   const [modalDate, setModalDate] = useState(todayStr);
   const [isModalEmployeeDropdownOpen, setIsModalEmployeeDropdownOpen] = useState(false);
+  const [modalEmployeeSearchText, setModalEmployeeSearchText] = useState('');
 
   // Filtros
   const [statusFilter, setStatusFilter] = useState<'all' | 'critical' | 'ok'>('all');
@@ -85,10 +86,11 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
   const formatMoney = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const refreshData = async () => {
-    if (state.currentUser?.companyId || state.currentUser?.role === 'DIRETORIA_MASTER') {
+    const isMaster = state.currentUser?.role === UserRole.MASTER || (state.currentUser?.role as any) === 'DIRETORIA_MASTER' || (state.currentUser?.role as any) === 'ADMINISTRADOR';
+    if (state.currentUser?.companyId || isMaster) {
       const data = await fetchCompleteCompanyData(
         state.currentUser?.companyId || null, 
-        state.currentUser?.role === 'DIRETORIA_MASTER'
+        isMaster
       );
       if (data) setState(prev => ({ ...prev, ...data }));
     }
@@ -383,16 +385,60 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
     );
   }, [state.inventory, itemSearchText]);
 
-  // Lista de funcionários sugeridos para quem retirou
-  const filteredEmployees = useMemo(() => {
-    const list = state.employees || [];
-    const query = (employeeSearchText || withdrawnBy).toLowerCase().trim();
-    if (!query) return list;
-    return list.filter(e => 
-      e.name.toLowerCase().includes(query) || 
-      (e.role && e.role.toLowerCase().includes(query))
-    );
-  }, [state.employees, employeeSearchText, withdrawnBy]);
+  // Gestores fixos solicitados (Murilo e Brenda) + Usuário logado
+  const baseManagers = useMemo(() => {
+    const list = ['Murilo', 'Brenda'];
+    if (state.currentUser?.name) {
+      const cur = state.currentUser.name.trim();
+      if (cur && !list.some(m => m.toLowerCase() === cur.toLowerCase())) {
+        list.push(cur);
+      }
+    }
+    return list;
+  }, [state.currentUser?.name]);
+
+  // Colaboradores em ativa (status ativo)
+  const activeEmployees = useMemo(() => {
+    return (state.employees || [])
+      .filter(e => e.status === 'active' || !e.status)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [state.employees]);
+
+  // Filtro inteligente para "Quem Retirou" na aba de retirada
+  const filteredWithdrawalOptions = useMemo(() => {
+    const query = employeeSearchText.toLowerCase().trim();
+    const managers = !query 
+      ? baseManagers 
+      : baseManagers.filter(m => m.toLowerCase().includes(query));
+
+    const employees = !query
+      ? activeEmployees
+      : activeEmployees.filter(e => 
+          e.name.toLowerCase().includes(query) || 
+          (e.role && e.role.toLowerCase().includes(query))
+        );
+
+    return { managers, employees };
+  }, [baseManagers, activeEmployees, employeeSearchText]);
+
+  // Filtro inteligente para o modal de movimentação rápida
+  const filteredModalOptions = useMemo(() => {
+    const query = modalEmployeeSearchText.toLowerCase().trim();
+    const managers = !query 
+      ? baseManagers 
+      : baseManagers.filter(m => m.toLowerCase().includes(query));
+
+    const employees = !query
+      ? activeEmployees
+      : activeEmployees.filter(e => 
+          e.name.toLowerCase().includes(query) || 
+          (e.role && e.role.toLowerCase().includes(query))
+        );
+
+    return { managers, employees };
+  }, [baseManagers, activeEmployees, modalEmployeeSearchText]);
+
+  const filteredEmployees = activeEmployees;
 
   const selectedItemObject = useMemo(() => {
     return state.inventory.find(i => i.id === selectedItemId) || null;
@@ -661,31 +707,72 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
 
               {/* Nome de Quem Retirou (AUTOMÁTICO COM CAMPO AMPLO E BUSCA DE COLABORADORES) */}
               <div className="space-y-1.5 relative md:col-span-1 lg:col-span-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <UserCheck size={13} className="text-[#16462d]"/> Quem Retirou o Item (Responsável) *
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (state.currentUser?.name) {
-                        setWithdrawnBy(state.currentUser.name);
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase mr-1">Atalhos rápidos:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWithdrawnBy('Murilo');
                         setEmployeeSearchText('');
-                      }
-                    }}
-                    className="text-[8px] font-black text-[#16462d] hover:underline uppercase bg-slate-100 px-2 py-0.5 rounded-md"
-                  >
-                    Usar Meu Nome ({state.currentUser?.name?.split(' ')[0] || 'Usuário'})
-                  </button>
+                        setIsEmployeeDropdownOpen(false);
+                      }}
+                      className={`text-[8px] font-black px-2.5 py-0.5 rounded-md transition-all uppercase ${
+                        withdrawnBy.toLowerCase() === 'murilo'
+                          ? 'bg-[#0c2a1c] text-white shadow-xs'
+                          : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                      }`}
+                    >
+                      Murilo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWithdrawnBy('Brenda');
+                        setEmployeeSearchText('');
+                        setIsEmployeeDropdownOpen(false);
+                      }}
+                      className={`text-[8px] font-black px-2.5 py-0.5 rounded-md transition-all uppercase ${
+                        withdrawnBy.toLowerCase() === 'brenda'
+                          ? 'bg-[#0c2a1c] text-white shadow-xs'
+                          : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                      }`}
+                    >
+                      Brenda
+                    </button>
+                    {state.currentUser?.name && !['murilo', 'brenda'].includes(state.currentUser.name.toLowerCase().trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWithdrawnBy(state.currentUser!.name);
+                          setEmployeeSearchText('');
+                          setIsEmployeeDropdownOpen(false);
+                        }}
+                        className={`text-[8px] font-black px-2.5 py-0.5 rounded-md transition-all uppercase ${
+                          withdrawnBy.toLowerCase() === state.currentUser.name.toLowerCase().trim()
+                            ? 'bg-[#0c2a1c] text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        {state.currentUser.name.split(' ')[0]}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="relative">
                   <input 
                     type="text"
                     className="w-full bg-slate-50 border-2 border-slate-200 px-4 py-4 pr-10 rounded-2xl font-black text-xs text-slate-800 outline-none focus:bg-white focus:border-[#16462d] transition-all uppercase shadow-sm placeholder:text-slate-400"
-                    placeholder="DIGITE OU SELECIONE O COLABORADOR..."
+                    placeholder="DIGITE OU SELECIONE (MURILO, BRENDA OU COLABORADOR ATIVO)..."
                     value={withdrawnBy}
-                    onFocus={() => setIsEmployeeDropdownOpen(true)}
+                    onFocus={() => {
+                      setEmployeeSearchText('');
+                      setIsEmployeeDropdownOpen(true);
+                    }}
                     onChange={e => {
                       setWithdrawnBy(e.target.value);
                       setEmployeeSearchText(e.target.value);
@@ -693,46 +780,106 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
                     }}
                   />
                   <button 
-                    type="button"
-                    onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 p-1 hover:text-slate-700"
+                    type="button" 
+                    onClick={() => {
+                      setEmployeeSearchText('');
+                      setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 p-1 hover:text-slate-700 cursor-pointer"
+                    title="Ver lista de responsáveis"
                   >
                     <ChevronDown size={18} />
                   </button>
                 </div>
 
-                {/* Dropdown Amplo para Seleção do Colaborador */}
+                {/* Dropdown Amplo para Seleção do Colaborador e Gestores */}
                 {isEmployeeDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-200 rounded-2xl shadow-2xl z-[110] mt-1 p-2 max-h-60 overflow-y-auto animate-in fade-in">
+                  <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-200 rounded-2xl shadow-2xl z-[110] mt-1 p-2 max-h-72 overflow-y-auto animate-in fade-in">
                     <div className="p-2 border-b flex justify-between items-center text-[9px] font-black text-slate-400 uppercase">
-                      <span>Equipe / Colaboradores ({filteredEmployees.length})</span>
+                      <span>Selecione quem está retirando</span>
                       <button 
                         type="button" 
                         onClick={() => setIsEmployeeDropdownOpen(false)}
-                        className="text-rose-600 hover:underline"
+                        className="text-rose-600 hover:underline font-bold"
                       >
                         Fechar
                       </button>
                     </div>
-                    {filteredEmployees.map(emp => (
-                      <button
-                        key={emp.id}
-                        type="button"
-                        className="w-full text-left p-3 hover:bg-slate-50 rounded-xl transition-all flex items-center justify-between text-xs"
-                        onClick={() => {
-                          setWithdrawnBy(emp.name);
-                          setIsEmployeeDropdownOpen(false);
-                        }}
-                      >
-                        <span className="font-black uppercase text-slate-800">{emp.name}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{emp.role}</span>
-                      </button>
-                    ))}
-                    {filteredEmployees.length === 0 && (
-                      <div className="p-3 text-center text-[10px] font-bold text-slate-400 uppercase">
-                        Nenhum colaborador encontrado com este nome. O nome digitado será salvo.
+
+                    {/* Grupo: Gestão / Administração */}
+                    {filteredWithdrawalOptions.managers.length > 0 && (
+                      <div className="py-1">
+                        <div className="px-2 py-1 text-[8px] font-black uppercase text-[#4b6f34] tracking-wider flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#16462d]" />
+                          Administração & Gestão
+                        </div>
+                        {filteredWithdrawalOptions.managers.map(mgr => (
+                          <button
+                            key={mgr}
+                            type="button"
+                            className={`w-full text-left p-3 hover:bg-emerald-50/70 rounded-xl transition-all flex items-center justify-between text-xs cursor-pointer ${
+                              withdrawnBy.toLowerCase() === mgr.toLowerCase() ? 'bg-emerald-50 text-[#16462d] font-black' : 'text-slate-800'
+                            }`}
+                            onClick={() => {
+                              setWithdrawnBy(mgr);
+                              setEmployeeSearchText('');
+                              setIsEmployeeDropdownOpen(false);
+                            }}
+                          >
+                            <span className="font-black uppercase flex items-center gap-2">
+                              {mgr}
+                              {mgr.toLowerCase() === 'murilo' && (
+                                <span className="text-[7.5px] px-1.5 py-0.5 rounded-md bg-[#0c2a1c] text-white">ADMIN</span>
+                              )}
+                              {mgr.toLowerCase() === 'brenda' && (
+                                <span className="text-[7.5px] px-1.5 py-0.5 rounded-md bg-[#16462d] text-white">GESTÃO</span>
+                              )}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Responsável</span>
+                          </button>
+                        ))}
                       </div>
                     )}
+
+                    {/* Grupo: Colaboradores em Ativa */}
+                    <div className="py-1 border-t border-slate-100">
+                      <div className="px-2 py-1 text-[8px] font-black uppercase text-[#16462d] tracking-wider flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Colaboradores em Ativa ({filteredWithdrawalOptions.employees.length})
+                        </span>
+                        <span className="text-[7.5px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-black">
+                          EQUIPE ATIVA
+                        </span>
+                      </div>
+                      {filteredWithdrawalOptions.employees.map(emp => (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          className={`w-full text-left p-3 hover:bg-slate-50 rounded-xl transition-all flex items-center justify-between text-xs cursor-pointer ${
+                            withdrawnBy.toLowerCase() === emp.name.toLowerCase() ? 'bg-slate-100 font-black' : ''
+                          }`}
+                          onClick={() => {
+                            setWithdrawnBy(emp.name);
+                            setEmployeeSearchText('');
+                            setIsEmployeeDropdownOpen(false);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Ativo" />
+                            <span className="font-black uppercase text-slate-800">{emp.name}</span>
+                          </div>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
+                            {emp.role || 'Colaborador'}
+                          </span>
+                        </button>
+                      ))}
+                      {filteredWithdrawalOptions.employees.length === 0 && (
+                        <div className="p-3 text-center text-[10px] font-bold text-slate-400 uppercase">
+                          {employeeSearchText ? 'Nenhum colaborador ativo encontrado com esse termo.' : 'Nenhum colaborador com status ativo cadastrado.'}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1417,50 +1564,134 @@ const Inventory: React.FC<InventoryProps> = ({ state, setState, notify }) => {
 
                 {/* Quem Retirou / Responsável Automático */}
                 <div className="space-y-1 relative">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
                     <label className="text-[10px] font-black text-slate-500 uppercase ml-1 flex items-center gap-1">
                       <UserCheck size={13} className="text-[#16462d]"/> {activeMovement.type === 'out' ? 'Quem Retirou o Item' : 'Responsável pela Entrada'}
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (state.currentUser?.name) setModalWithdrawnBy(state.currentUser.name);
-                      }}
-                      className="text-[8px] font-bold text-[#16462d] hover:underline uppercase"
-                    >
-                      Meu Nome
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalWithdrawnBy('Murilo');
+                          setModalEmployeeSearchText('');
+                          setIsModalEmployeeDropdownOpen(false);
+                        }}
+                        className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase transition-all ${
+                          modalWithdrawnBy.toLowerCase() === 'murilo' ? 'bg-[#0c2a1c] text-white shadow-xs' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        Murilo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalWithdrawnBy('Brenda');
+                          setModalEmployeeSearchText('');
+                          setIsModalEmployeeDropdownOpen(false);
+                        }}
+                        className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase transition-all ${
+                          modalWithdrawnBy.toLowerCase() === 'brenda' ? 'bg-[#0c2a1c] text-white shadow-xs' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        Brenda
+                      </button>
+                      {state.currentUser?.name && !['murilo', 'brenda'].includes(state.currentUser.name.toLowerCase().trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalWithdrawnBy(state.currentUser!.name);
+                            setModalEmployeeSearchText('');
+                            setIsModalEmployeeDropdownOpen(false);
+                          }}
+                          className="text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        >
+                          Meu Nome
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <input 
                     type="text"
                     className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-2xl font-black text-xs outline-none focus:bg-white focus:border-[#0c2a1c] uppercase" 
+                    placeholder="DIGITE OU SELECIONE (MURILO, BRENDA OU COLABORADOR ATIVO)..."
                     value={modalWithdrawnBy} 
-                    onFocus={() => setIsModalEmployeeDropdownOpen(true)}
+                    onFocus={() => {
+                      setModalEmployeeSearchText('');
+                      setIsModalEmployeeDropdownOpen(true);
+                    }}
                     onChange={e => {
                       setModalWithdrawnBy(e.target.value);
+                      setModalEmployeeSearchText(e.target.value);
                       setIsModalEmployeeDropdownOpen(true);
                     }} 
                   />
                   {isModalEmployeeDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-200 rounded-2xl shadow-xl z-[120] mt-1 p-2 max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-200 rounded-2xl shadow-xl z-[120] mt-1 p-2 max-h-56 overflow-y-auto">
                       <div className="p-1 border-b flex justify-between text-[9px] font-black text-slate-400 uppercase">
-                        <span>Equipe</span>
-                        <button type="button" onClick={() => setIsModalEmployeeDropdownOpen(false)} className="text-rose-600">Fechar</button>
+                        <span>Gestão e Colaboradores em Ativa</span>
+                        <button type="button" onClick={() => setIsModalEmployeeDropdownOpen(false)} className="text-rose-600 hover:underline font-bold">Fechar</button>
                       </div>
-                      {state.employees.map(emp => (
-                        <button
-                          key={emp.id}
-                          type="button"
-                          className="w-full text-left p-2 hover:bg-slate-50 rounded-xl text-xs font-black uppercase text-slate-700 flex justify-between"
-                          onClick={() => {
-                            setModalWithdrawnBy(emp.name);
-                            setIsModalEmployeeDropdownOpen(false);
-                          }}
-                        >
-                          <span>{emp.name}</span>
-                          <span className="text-[9px] text-slate-400">{emp.role}</span>
-                        </button>
-                      ))}
+
+                      {/* Gestores */}
+                      {filteredModalOptions.managers.length > 0 && (
+                        <div className="py-1">
+                          <div className="px-2 py-0.5 text-[8px] font-black uppercase text-[#4b6f34]">Gestão & Administração</div>
+                          {filteredModalOptions.managers.map(mgr => (
+                            <button
+                              key={mgr}
+                              type="button"
+                              className="w-full text-left p-2 hover:bg-emerald-50 rounded-xl text-xs font-black uppercase text-slate-800 flex justify-between items-center cursor-pointer"
+                              onClick={() => {
+                                setModalWithdrawnBy(mgr);
+                                setModalEmployeeSearchText('');
+                                setIsModalEmployeeDropdownOpen(false);
+                              }}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                {mgr}
+                                {mgr.toLowerCase() === 'murilo' && (
+                                  <span className="text-[7px] px-1 py-0.2 bg-[#0c2a1c] text-white rounded">ADMIN</span>
+                                )}
+                                {mgr.toLowerCase() === 'brenda' && (
+                                  <span className="text-[7px] px-1 py-0.2 bg-[#16462d] text-white rounded">GESTÃO</span>
+                                )}
+                              </span>
+                              <span className="text-[8px] text-emerald-800 font-bold">RESPONSÁVEL</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Colaboradores em Ativa */}
+                      <div className="py-1 border-t border-slate-100">
+                        <div className="px-2 py-0.5 text-[8px] font-black uppercase text-[#16462d] flex justify-between items-center">
+                          <span>Colaboradores em Ativa ({filteredModalOptions.employees.length})</span>
+                          <span className="text-[7px] bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded font-black">ATIVOS</span>
+                        </div>
+                        {filteredModalOptions.employees.map(emp => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            className="w-full text-left p-2 hover:bg-slate-50 rounded-xl text-xs font-black uppercase text-slate-700 flex justify-between items-center cursor-pointer"
+                            onClick={() => {
+                              setModalWithdrawnBy(emp.name);
+                              setModalEmployeeSearchText('');
+                              setIsModalEmployeeDropdownOpen(false);
+                            }}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              {emp.name}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded">{emp.role || 'Colaborador'}</span>
+                          </button>
+                        ))}
+                        {filteredModalOptions.employees.length === 0 && (
+                          <div className="p-2 text-center text-[9px] font-bold text-slate-400 uppercase">
+                            Nenhum colaborador ativo encontrado.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

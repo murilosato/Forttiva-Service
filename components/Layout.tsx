@@ -52,12 +52,20 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user
     return item ? item.label : id;
   };
 
-  const roleLabel = (role: UserRole) => {
+  const roleLabel = (role: UserRole | string) => {
     switch(role) {
-      case UserRole.MASTER: return 'DIRETORIA MASTER';
-      case UserRole.ADMIN: return 'GERÊNCIA';
-      case UserRole.OPERATIONAL: return 'OPERACIONAL';
-      default: return role;
+      case UserRole.MASTER:
+      case 'DIRETORIA_MASTER':
+      case 'ADMINISTRADOR':
+        return 'ADMINISTRADOR';
+      case UserRole.ADMIN:
+      case 'GERENTE_UNIDADE':
+        return 'GERÊNCIA';
+      case UserRole.OPERATIONAL:
+      case 'OPERACIONAL':
+        return 'OPERACIONAL';
+      default:
+        return String(role || '').replace('_', ' ');
     }
   };
 

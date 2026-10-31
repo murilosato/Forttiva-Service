@@ -54,7 +54,7 @@ export const INITIAL_STATE: AppState = {
       id: 'master-1',
       companyId: 'forttiva-main',
       email: 'admin@forttivaservicos.com',
-      name: 'Diretoria Master',
+      name: 'Administrador',
       role: UserRole.MASTER,
       status: 'ativo',
       permissions: {

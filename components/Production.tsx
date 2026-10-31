@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Area, Service, AppState, ServiceType, Employee } from '../types';
+import { Area, Service, AppState, ServiceType, Employee, UserRole } from '../types';
 import { Plus, Trash2, CheckCircle2, MapPin, X, ChevronDown, ChevronUp, Loader2, Info, ArrowRight, Activity, Archive, Calendar, Edit3, Search, Filter, Clock, FileText, DollarSign, Layers, BarChart3, UserCheck } from 'lucide-react';
 import { SERVICE_OPTIONS } from '../constants';
 import ConfirmationModal from './ConfirmationModal';
@@ -40,8 +40,9 @@ const Production: React.FC<ProductionProps> = ({ state, setState }) => {
   const activeEmployees = useMemo(() => state.employees.filter(e => e.status === 'active'), [state.employees]);
 
   const refreshData = async () => {
-    if (state.currentUser?.companyId || state.currentUser?.role === 'DIRETORIA_MASTER') {
-      const data = await fetchCompleteCompanyData(state.currentUser?.companyId || null, state.currentUser?.role === 'DIRETORIA_MASTER');
+    const isMaster = state.currentUser?.role === UserRole.MASTER || (state.currentUser?.role as any) === 'DIRETORIA_MASTER' || (state.currentUser?.role as any) === 'ADMINISTRADOR';
+    if (state.currentUser?.companyId || isMaster) {
+      const data = await fetchCompleteCompanyData(state.currentUser?.companyId || null, isMaster);
       if (data) setState(prev => ({ ...prev, ...data }));
     }
   };

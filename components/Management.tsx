@@ -91,8 +91,15 @@ const Management: React.FC<ManagementProps> = ({ state, notify }) => {
     } catch (e: any) { notify(e.message, "error"); } finally { setIsLoading(false); }
   };
 
-  const isMaster = state.currentUser?.role === UserRole.MASTER;
-  const filteredProfiles = profiles.filter(p => !selectedCompanyId || p.company_id === selectedCompanyId || p.role === UserRole.MASTER);
+  const isMaster = state.currentUser?.role === UserRole.MASTER || (state.currentUser?.role as any) === 'DIRETORIA_MASTER' || (state.currentUser?.role as any) === 'ADMINISTRADOR';
+  const filteredProfiles = profiles.filter(p => !selectedCompanyId || p.company_id === selectedCompanyId || p.role === UserRole.MASTER || p.role === 'DIRETORIA_MASTER' || p.role === 'ADMINISTRADOR');
+
+  const roleBadgeLabel = (role: string) => {
+    if (role === UserRole.MASTER || role === 'DIRETORIA_MASTER' || role === 'ADMINISTRADOR') return 'ADMINISTRADOR';
+    if (role === UserRole.ADMIN || role === 'GERENTE_UNIDADE' || role === 'GERÊNCIA') return 'GERÊNCIA';
+    if (role === UserRole.OPERATIONAL || role === 'OPERACIONAL') return 'OPERACIONAL';
+    return role ? role.replace('_', ' ') : '';
+  };
 
   const permissionLabels: Record<string, string> = {
     production: 'Produção',
@@ -144,8 +151,8 @@ const Management: React.FC<ManagementProps> = ({ state, notify }) => {
                   <tr key={p.id} className="hover:bg-slate-50/50">
                     <td className="px-8 py-5 truncate max-w-[200px]">{p.full_name}</td>
                     <td className="px-8 py-5 whitespace-nowrap">
-                       <span className={`px-4 py-1.5 rounded-xl text-[8px] text-white ${p.role === UserRole.MASTER ? 'bg-[#0c2a1c]' : p.role === UserRole.ADMIN ? 'bg-[#16462d]' : 'bg-[#4b6f34]'}`}>
-                         {p.role?.replace('_', ' ')}
+                       <span className={`px-4 py-1.5 rounded-xl text-[8px] text-white ${p.role === UserRole.MASTER || p.role === 'DIRETORIA_MASTER' || p.role === 'ADMINISTRADOR' ? 'bg-[#0c2a1c]' : p.role === UserRole.ADMIN || p.role === 'GERENTE_UNIDADE' ? 'bg-[#16462d]' : 'bg-[#4b6f34]'}`}>
+                         {roleBadgeLabel(p.role)}
                        </span>
                     </td>
                     <td className="px-8 py-5 text-center whitespace-nowrap">
@@ -188,7 +195,7 @@ const Management: React.FC<ManagementProps> = ({ state, notify }) => {
                       <select className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] font-black uppercase" value={form.role} onChange={e => setForm({...form, role: e.target.value as any})}>
                         <option value={UserRole.OPERATIONAL}>OPERACIONAL</option>
                         <option value={UserRole.ADMIN}>GERENTE</option>
-                        {state.currentUser?.role === UserRole.MASTER && <option value={UserRole.MASTER}>MASTER</option>}
+                        {isMaster && <option value={UserRole.MASTER}>ADMINISTRADOR</option>}
                       </select>
                    </div>
                    <div className="space-y-1">
