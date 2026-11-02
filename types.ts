@@ -107,7 +107,7 @@ export interface Candidate {
   experience?: string;
   observations?: string;
   desiredRole?: string;
-  status: 'banco_talentos' | 'em_analise' | 'entrevistado' | 'aprovado' | 'contratado' | 'descartado';
+  status: 'reserva' | 'ativo' | 'descartado' | 'arquivado' | 'banco_talentos' | 'em_analise' | 'entrevistado' | 'aprovado' | 'contratado';
   createdAt?: string;
 }
 

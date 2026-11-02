@@ -1,7 +1,7 @@
 {
-  "name": "Forttiva Service - Força e Eficiência em Campo",
+  "name": "Forttiva - Gestão e Operações",
   "short_name": "Forttiva",
-  "description": "Sistema de Gestão de Produção, Equipes e Operações Forttiva Serviços",
+  "description": "Sistema de Gestão de Produção, Equipes e Operações Forttiva",
   "start_url": "/",
   "display": "minimal-ui",
   "background_color": "#092318",

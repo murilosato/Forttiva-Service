@@ -159,7 +159,7 @@ const Settings: React.FC<SettingsProps> = ({ state, setState, notify }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-1 block">Razão Social</label>
-                <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] font-black uppercase outline-none focus:bg-white focus:border-[#7ea24e]" placeholder="FORTTIVA SERVIÇOS" value={companyForm.name} onChange={e => setCompanyForm({...companyForm, name: e.target.value})} />
+                <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] font-black uppercase outline-none focus:bg-white focus:border-[#7ea24e]" placeholder="FORTTIVA" value={companyForm.name} onChange={e => setCompanyForm({...companyForm, name: e.target.value})} />
              </div>
              <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-1 block">CNPJ</label>
@@ -171,7 +171,7 @@ const Settings: React.FC<SettingsProps> = ({ state, setState, notify }) => {
              </div>
              <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-1 block">Site / Website</label>
-                <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] font-black outline-none focus:bg-white focus:border-[#7ea24e]" placeholder="WWW.FORTTIVASERVICOS.COM.BR" value={companyForm.website} onChange={e => setCompanyForm({...companyForm, website: e.target.value})} />
+                <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] font-black outline-none focus:bg-white focus:border-[#7ea24e]" placeholder="WWW.FORTTIVA.COM.BR" value={companyForm.website} onChange={e => setCompanyForm({...companyForm, website: e.target.value})} />
              </div>
              <div className="sm:col-span-2 space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-1 block">Endereço Completo</label>

@@ -280,7 +280,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ state, setState, notify }) => {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="min-w-0">
           <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase truncate">Auditoria & Relatórios</h2>
-          <p className="text-[10px] text-[#4b6f34] font-black uppercase tracking-widest truncate">Sincronização Cloud Forttiva Service</p>
+          <p className="text-[10px] text-[#4b6f34] font-black uppercase tracking-widest truncate">Sincronização Cloud Forttiva</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex bg-slate-200 p-1 rounded-xl">
@@ -688,13 +688,13 @@ const Analytics: React.FC<AnalyticsProps> = ({ state, setState, notify }) => {
                   </div>
                   <div className="space-y-2">
                     <div className="border-t-2 border-slate-900 pt-3 text-[10px] font-black uppercase">Administração Operacional</div>
-                    <p className="text-[6px] font-bold text-[#52793b]">Forttiva Serviços • Força e eficiência em campo</p>
+                    <p className="text-[6px] font-bold text-[#52793b]">Forttiva • Força e eficiência em campo</p>
                   </div>
                 </div>
 
                 {/* Rodapé Administrativo */}
                 <div className="mt-12 text-center text-[6px] text-slate-400 font-bold uppercase tracking-widest border-t pt-4">
-                  Documento emitido via Sistema Central Forttiva Service Cloud v3.5 • {new Date().toLocaleString('pt-BR')}
+                  Documento emitido via Sistema Central Forttiva Cloud v3.5 • {new Date().toLocaleString('pt-BR')}
                 </div>
               </div>
            </div>

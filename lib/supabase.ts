@@ -353,9 +353,20 @@ export const dbSave = async (table: string, data: any) => {
       query = supabase.from(table).insert(payloadWithoutId);
     }
   } else if (hasValidId) {
-    query = supabase.from(table).update(payloadWithoutId).eq('id', id);
+    // Tenta atualizar se o registro com este id já existir no banco
+    const { data: updated, error: updateError } = await supabase.from(table).update(payloadWithoutId).eq('id', id).select();
+    if (!updateError && updated && updated.length > 0) {
+      return updated;
+    }
+    // Se o registro não existia com este id (ex: candidato ativo integrado na tabela de colaboradores), insere com o id fornecido
+    const { data: inserted, error: insertError } = await supabase.from(table).insert(fullPayload).select();
+    if (insertError) {
+      console.error(`Erro crítico no banco [${table} insert com id]:`, insertError);
+      throw insertError;
+    }
+    return inserted;
   } else {
-    // Na inserção de registros novos, garantimos payload limpo sem id nulo
+    // Na inserção de registros novos sem id, garantimos payload limpo sem id nulo
     query = supabase.from(table).insert(payloadWithoutId);
   }
 

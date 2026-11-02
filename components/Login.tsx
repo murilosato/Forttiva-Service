@@ -92,7 +92,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       </button>
 
       <div className="w-full max-w-[460px] relative z-10 py-6 flex flex-col items-center">
-        {/* Brand Header com a Logo Oficial Forttiva Serviços */}
+        {/* Brand Header com a Logo Oficial Forttiva */}
         <div className="flex flex-col items-center mb-6 w-full animate-in fade-in slide-in-from-top-4 duration-700">
           <div className="hover:scale-[1.02] transition-transform duration-300">
             <ForttivaLogo variant="card" size="lg" />
@@ -246,7 +246,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 />
               </div>
               <h3 className="text-sm font-black uppercase text-[#0c2a1c] tracking-widest">
-                Forttiva Service App
+                Forttiva App
               </h3>
               <p className="text-[11px] text-[#4b6f34] font-semibold italic">
                 Força e eficiência em campo.

@@ -55,7 +55,7 @@ export const ForttivaLogo: React.FC<ForttivaLogoProps> = ({
       <div className={`inline-flex items-center justify-center bg-white shadow-md border border-white/40 select-none transition-transform ${cardPaddingMap[size]} ${className}`}>
         <img 
           src="/assets/aistudio/image_d343a7bb.png" 
-          alt="Forttiva Serviços - Força e eficiência em campo" 
+          alt="Forttiva" 
           className={`${heightMap[size]} w-auto object-contain`} 
         />
       </div>
@@ -67,7 +67,7 @@ export const ForttivaLogo: React.FC<ForttivaLogoProps> = ({
     <div className={`inline-flex items-center select-none ${className}`}>
       <img 
         src="/assets/aistudio/image_d343a7bb.png" 
-        alt="Forttiva Serviços - Força e eficiência em campo" 
+        alt="Forttiva" 
         className={`${heightMap[size]} w-auto object-contain`} 
       />
     </div>

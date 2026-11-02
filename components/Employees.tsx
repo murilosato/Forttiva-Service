@@ -6,7 +6,7 @@ import {
   Fingerprint, Smartphone, MapPin, CreditCard, Power, UserX, AlertCircle, Clock, 
   Briefcase, HeartPulse, ShieldAlert, Palmtree, Mail, DollarSign, Calendar, Users2, 
   CheckCircle2, Wallet, BarChart3, Send, Printer, Search, Filter, Phone, Sparkles, 
-  Award, FileText, Check, UserCheck, Cake, UserRoundSearch, Eye
+  Award, FileText, Check, UserCheck, Cake, UserRoundSearch, Eye, Archive
 } from 'lucide-react';
 import { dbSave, dbDelete, fetchCompleteCompanyData } from '../lib/supabase';
 import ConfirmationModal from './ConfirmationModal';
@@ -91,13 +91,27 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   // Controle de Abas: 'team' (Equipe e Frequência) ou 'candidates' (Banco de Candidatos)
   const [rhTab, setRhTab] = useState<'team' | 'candidates'>('team');
 
+  // Busca e Filtros na Frequência da Equipe
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+  const [attendanceFilterType, setAttendanceFilterType] = useState<'all' | 'employees' | 'candidates'>('all');
+
   // Estados do Banco de Candidatos
   const [showCandidateModal, setShowCandidateModal] = useState(false);
   const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
   const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
   const [candidateSearchText, setCandidateSearchText] = useState('');
-  const [candidateStatusFilter, setCandidateStatusFilter] = useState('ALL');
+  const [candidateStatusFilter, setCandidateStatusFilter] = useState<'ALL' | 'reserva' | 'ativo' | 'descartado'>('ALL');
   const [candidateRoleFilter, setCandidateRoleFilter] = useState('ALL');
+
+  // Classificadores dos 3 grupos de status solicitados: Reservas, Ativos e Descartados / Arquivados
+  const isReserva = (status?: string) => !status || status === 'reserva' || status === 'banco_talentos' || status === 'em_analise' || status === 'entrevistado';
+  const isAtivo = (status?: string) => status === 'ativo' || status === 'aprovado' || status === 'contratado';
+  const isDescartado = (status?: string) => status === 'descartado' || status === 'arquivado';
+
+  // Subtotais / Contadores dos 3 Cards
+  const reservasCount = useMemo(() => (state.candidates || []).filter(c => isReserva(c.status)).length, [state.candidates]);
+  const ativosCount = useMemo(() => (state.candidates || []).filter(c => isAtivo(c.status)).length, [state.candidates]);
+  const descartadosCount = useMemo(() => (state.candidates || []).filter(c => isDescartado(c.status)).length, [state.candidates]);
 
   const initialCandidateForm = {
     name: '',
@@ -107,7 +121,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     experience: '',
     observations: '',
     desiredRole: '',
-    status: 'banco_talentos' as Candidate['status']
+    status: 'reserva' as Candidate['status']
   };
 
   const [candidateForm, setCandidateForm] = useState(initialCandidateForm);
@@ -140,7 +154,13 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         (c.desiredRole && c.desiredRole.toLowerCase().includes(q)) ||
         (c.observations && c.observations.toLowerCase().includes(q));
 
-      const statusMatch = candidateStatusFilter === 'ALL' || c.status === candidateStatusFilter;
+      const statusMatch = 
+        candidateStatusFilter === 'ALL' ? true :
+        candidateStatusFilter === 'reserva' ? isReserva(c.status) :
+        candidateStatusFilter === 'ativo' ? isAtivo(c.status) :
+        candidateStatusFilter === 'descartado' ? isDescartado(c.status) :
+        c.status === candidateStatusFilter;
+
       const roleMatch = candidateRoleFilter === 'ALL' || c.desiredRole === candidateRoleFilter;
 
       return nameMatch && statusMatch && roleMatch;
@@ -162,7 +182,9 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         throw new Error("Empresa não identificada");
       }
 
-      await dbSave('candidates', {
+      const targetStatus = candidateForm.status || 'reserva';
+
+      const savedCand = await dbSave('candidates', {
         id: editingCandidateId || undefined,
         companyId: state.currentUser.companyId,
         name: candidateForm.name.trim().toUpperCase(),
@@ -172,8 +194,35 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         experience: candidateForm.experience ? candidateForm.experience.trim().toUpperCase() : null,
         observations: candidateForm.observations ? candidateForm.observations.trim().toUpperCase() : null,
         desiredRole: candidateForm.desiredRole ? candidateForm.desiredRole.trim().toUpperCase() : null,
-        status: candidateForm.status || 'banco_talentos'
+        status: targetStatus
       });
+
+      const candId = editingCandidateId || (savedCand as any)?.id;
+
+      // Se o candidato foi marcado como ATIVO, garante presença também na tabela de colaboradores (employees)
+      // para permitir o lançamento imediato na frequência sem violar integridade de chave estrangeira
+      if (candId && isAtivo(targetStatus)) {
+        await dbSave('employees', {
+          id: candId,
+          companyId: state.currentUser.companyId,
+          name: candidateForm.name.trim().toUpperCase(),
+          role: candidateForm.desiredRole ? candidateForm.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
+          status: 'active',
+          defaultValue: 0,
+          paymentModality: 'DIARIA',
+          phone: candidateForm.phone || null,
+          address: candidateForm.address ? candidateForm.address.trim().toUpperCase() : null
+        });
+      } else if (candId && isDescartado(targetStatus)) {
+        // Se descartado e existia em employees, atualiza para inativo
+        const existsInEmp = state.employees.some(e => e.id === candId);
+        if (existsInEmp) {
+          await dbSave('employees', {
+            id: candId,
+            status: 'inactive'
+          });
+        }
+      }
 
       await refreshData();
       setShowCandidateModal(false);
@@ -189,6 +238,10 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
 
   const handleEditCandidate = (cand: Candidate) => {
     setEditingCandidateId(cand.id);
+    let normalizedStatus: Candidate['status'] = 'reserva';
+    if (isAtivo(cand.status)) normalizedStatus = 'ativo';
+    else if (isDescartado(cand.status)) normalizedStatus = 'descartado';
+
     setCandidateForm({
       name: cand.name,
       birthDate: cand.birthDate || '',
@@ -197,7 +250,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
       experience: cand.experience || '',
       observations: cand.observations || '',
       desiredRole: cand.desiredRole || '',
-      status: cand.status || 'banco_talentos'
+      status: normalizedStatus
     });
     setShowCandidateModal(true);
   };
@@ -232,9 +285,50 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     notify(`Dados de ${cand.name} importados! Preencha CPF, Chave PIX e valor da diária para contratar.`);
   };
 
+  // Sincronização preventiva: assegura que qualquer candidato ativo possua registro correspondente em 'employees',
+  // eliminando risco de violação de integridade de chave estrangeira (foreign key) ao registrar presenças na frequência
+  React.useEffect(() => {
+    const syncActiveCandidatesToEmployees = async () => {
+      const activeCandidates = (state.candidates || []).filter(c => isAtivo(c.status));
+      if (activeCandidates.length === 0) return;
+
+      const compId = state.currentUser?.companyId || state.company?.id || '00000000-0000-0000-0000-000000000001';
+      const existingEmpIds = new Set(state.employees.map(e => e.id));
+      let hadNewSync = false;
+
+      for (const cand of activeCandidates) {
+        if (!existingEmpIds.has(cand.id)) {
+          try {
+            await dbSave('employees', {
+              id: cand.id,
+              companyId: cand.companyId || compId,
+              name: cand.name.trim().toUpperCase(),
+              role: cand.desiredRole ? cand.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
+              status: 'active',
+              defaultValue: 0,
+              paymentModality: 'DIARIA',
+              phone: cand.phone || null,
+              address: cand.address ? cand.address.trim().toUpperCase() : null
+            });
+            hadNewSync = true;
+          } catch (err) {
+            console.error('Erro na sincronização de candidato ativo:', err);
+          }
+        }
+      }
+
+      if (hadNewSync) {
+        await refreshData();
+      }
+    };
+
+    syncActiveCandidatesToEmployees();
+  }, [state.candidates, state.employees.length, state.currentUser?.companyId, state.company?.id]);
+
   const refreshData = async () => {
-    if (state.currentUser?.companyId) {
-      const data = await fetchCompleteCompanyData(state.currentUser.companyId);
+    const compId = state.currentUser?.companyId || state.company?.id;
+    if (compId) {
+      const data = await fetchCompleteCompanyData(compId);
       if (data) setState(prev => ({ ...prev, ...data }));
     }
   };
@@ -249,8 +343,52 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   };
 
   const handleToggleAttendance = async (empId: string, date: string) => {
-    const emp = state.employees.find(e => e.id === empId);
-    if (!emp) return;
+    const compId = state.currentUser?.companyId || state.company?.id || '00000000-0000-0000-0000-000000000001';
+    let emp = state.employees.find(e => e.id === empId);
+
+    // Se o colaborador não constar na lista principal de funcionários, verifica se é um candidato ativo
+    if (!emp) {
+      const cand = (state.candidates || []).find(c => c.id === empId);
+      if (cand && isAtivo(cand.status)) {
+        try {
+          await dbSave('employees', {
+            id: cand.id,
+            companyId: cand.companyId || compId,
+            name: cand.name.trim().toUpperCase(),
+            role: cand.desiredRole ? cand.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
+            status: 'active',
+            defaultValue: 0,
+            paymentModality: 'DIARIA',
+            phone: cand.phone || null,
+            address: cand.address ? cand.address.trim().toUpperCase() : null
+          });
+          emp = {
+            id: cand.id,
+            companyId: cand.companyId || compId,
+            name: cand.name.trim().toUpperCase(),
+            role: cand.desiredRole ? cand.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
+            status: 'active',
+            defaultValue: 0,
+            paymentModality: 'DIARIA',
+            phone: cand.phone || undefined,
+            address: cand.address || undefined
+          };
+          setState(prev => ({ 
+            ...prev, 
+            employees: [...prev.employees.filter(e => e.id !== cand.id), emp!] 
+          }));
+        } catch (err) {
+          console.error("Erro ao sincronizar candidato ativo como colaborador:", err);
+          notify("Erro ao preparar cadastro do candidato para frequência", "error");
+          return;
+        }
+      }
+    }
+
+    if (!emp) {
+      notify("Colaborador não localizado", "error");
+      return;
+    }
     if (emp.status === 'inactive') return notify("Não é possível lançar frequência para inativos", "error");
 
     const key = `${empId}_${date}`;
@@ -261,7 +399,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
       const allExisting = state.attendanceRecords.filter(r => r.employeeId === empId && r.date === date);
       let existing = allExisting[0];
 
-      // Se houver registros duplicados no estado local, removemos os excedentes no Supabase para limpar sujeira
+      // Se houver registros duplicados no estado local, removemos os excedentes no Supabase para manter integridade
       if (allExisting.length > 1) {
         console.warn(`Duplicados encontrados para o colaborador ${empId} em ${date}. Limpando...`);
         try {
@@ -290,9 +428,11 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         return;
       }
 
+      const targetCompanyId = emp.companyId || compId;
+
       if (!existing) {
         await dbSave('attendance_records', {
-          companyId: state.currentUser?.companyId,
+          companyId: targetCompanyId,
           employeeId: empId,
           date,
           status: 'present',
@@ -300,15 +440,26 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           paymentStatus: 'pendente'
         });
       } else if (existing.status === 'present') {
-        await dbSave('attendance_records', { ...existing, status: 'partial', value: (Number(emp.defaultValue) || 0) / 2 });
+        await dbSave('attendance_records', { 
+          ...existing, 
+          companyId: targetCompanyId,
+          status: 'partial', 
+          value: (Number(emp.defaultValue) || 0) / 2 
+        });
       } else if (existing.status === 'partial') {
-        await dbSave('attendance_records', { ...existing, status: 'absent', value: 0 });
+        await dbSave('attendance_records', { 
+          ...existing, 
+          companyId: targetCompanyId,
+          status: 'absent', 
+          value: 0 
+        });
       } else {
         await dbDelete('attendance_records', existing.id);
       }
       await refreshData();
-    } catch (e) { 
-      notify("Erro ao sincronizar presença", "error"); 
+    } catch (e: any) { 
+      console.error("Erro detalhado ao sincronizar presença:", e);
+      notify("Erro ao sincronizar presença: " + (e?.message || "Tente novamente"), "error"); 
     } finally {
       savingKeys.current.delete(key);
     }
@@ -367,7 +518,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
 
       await dbSave('attendance_records', {
         id: existingId,
-        companyId: state.currentUser?.companyId,
+        companyId: emp.companyId || state.currentUser?.companyId || state.company?.id || '00000000-0000-0000-0000-000000000001',
         employeeId: emp.id,
         date,
         status: dbStatus,
@@ -609,7 +760,53 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
 
   const daysInMonth = useMemo(() => new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 0).getDate(), [currentCalendarDate]);
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const filteredEmployees = state.employees.filter(e => showInactive || e.status === 'active');
+
+  // Lista unificada para a Frequência: Colaboradores da Equipe + Candidatos Ativos
+  const roster = useMemo(() => {
+    const existingIds = new Set(state.employees.map(e => e.id));
+    const existingNames = new Set(state.employees.map(e => e.name.trim().toUpperCase()));
+
+    // Colaboradores da equipe
+    const list: (Employee & { isCandidate?: boolean })[] = state.employees
+      .filter(e => showInactive || e.status === 'active')
+      .map(e => ({
+        ...e,
+        isCandidate: (state.candidates || []).some(c => c.id === e.id)
+      }));
+
+    // Inclusão dos candidatos que estejam ATIVOS no banco de candidatos
+    (state.candidates || []).forEach(cand => {
+      if (isAtivo(cand.status)) {
+        if (!existingIds.has(cand.id) && !existingNames.has(cand.name.trim().toUpperCase())) {
+          list.push({
+            id: cand.id,
+            companyId: cand.companyId || state.currentUser?.companyId || '',
+            name: cand.name,
+            role: cand.desiredRole || 'CANDIDATO ATIVO',
+            status: 'active',
+            defaultValue: 0,
+            paymentModality: 'DIARIA',
+            isCandidate: true,
+            phone: cand.phone,
+            address: cand.address
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [state.employees, state.candidates, showInactive, state.currentUser?.companyId]);
+
+  const filteredEmployees = useMemo(() => {
+    return roster.filter(emp => {
+      if (attendanceFilterType === 'candidates' && !emp.isCandidate) return false;
+      if (attendanceFilterType === 'employees' && emp.isCandidate) return false;
+
+      if (!attendanceSearch.trim()) return true;
+      const q = attendanceSearch.toLowerCase().trim();
+      return emp.name.toLowerCase().includes(q) || (emp.role && emp.role.toLowerCase().includes(q));
+    });
+  }, [roster, attendanceSearch, attendanceFilterType]);
 
   const handlePrevMonth = () => {
     setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -626,7 +823,13 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   // Cálculos de Resumo Financeiro do Mês Visualizado - Fechamento do Mês
   const monthSummary = useMemo(() => {
     const yearMonth = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}`;
-    const allEmpMap = new Map<string, Employee>(state.employees.map(e => [e.id, e]));
+    const allEmpMap = new Map<string, { status: string }>();
+    state.employees.forEach(e => allEmpMap.set(e.id, { status: e.status }));
+    (state.candidates || []).forEach(c => {
+      if (!allEmpMap.has(c.id)) {
+        allEmpMap.set(c.id, { status: isAtivo(c.status) ? 'active' : 'inactive' });
+      }
+    });
     
     let paid = 0;
     let pending = 0;
@@ -648,7 +851,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     });
 
     return { paid, pending, total: paid + pending };
-  }, [state.attendanceRecords, state.employees, currentCalendarDate, showInactive]);
+  }, [state.attendanceRecords, state.employees, state.candidates, currentCalendarDate, showInactive]);
 
   const formatMoney = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -870,6 +1073,68 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           </div>
 
           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+            {/* Barra de Busca e Filtro de Frequência (Colaboradores e Candidatos Ativos) */}
+            <div className="p-4 md:p-5 border-b bg-slate-50/70 flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input 
+                  type="text"
+                  placeholder="PESQUISAR NA FREQUÊNCIA (COLABORADORES OU CANDIDATOS ATIVOS)..."
+                  value={attendanceSearch}
+                  onChange={e => setAttendanceSearch(e.target.value)}
+                  className="w-full bg-white border-2 border-slate-200 pl-10 pr-9 py-2.5 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-[#16462d] transition-all placeholder:text-slate-400 shadow-xs"
+                />
+                {attendanceSearch && (
+                  <button 
+                    type="button" 
+                    onClick={() => setAttendanceSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    title="Limpar busca"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro Rápido: Todos, Candidatos Ativos e Equipe Efetiva */}
+              <div className="flex items-center gap-2 self-start md:self-auto flex-wrap w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setAttendanceFilterType('all')}
+                  className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${
+                    attendanceFilterType === 'all' 
+                      ? 'bg-[#0c2a1c] text-white shadow-xs' 
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Todos ({roster.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceFilterType('candidates')}
+                  className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-1.5 ${
+                    attendanceFilterType === 'candidates' 
+                      ? 'bg-emerald-600 text-white shadow-xs' 
+                      : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
+                  }`}
+                >
+                  <Sparkles size={12} />
+                  Candidatos Ativos ({roster.filter(m => m.isCandidate).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceFilterType('employees')}
+                  className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${
+                    attendanceFilterType === 'employees' 
+                      ? 'bg-[#16462d] text-white shadow-xs' 
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Equipe Efetiva ({roster.filter(m => !m.isCandidate).length})
+                </button>
+              </div>
+            </div>
+
             <div className="p-4 md:p-6 border-b bg-slate-50 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <button onClick={handlePrevMonth} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors" title="Mês Anterior"><ChevronLeft size={18} /></button>
@@ -914,7 +1179,13 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredEmployees.map(emp => (
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={calendarDays.length + 1} className="p-8 text-center text-xs font-bold text-slate-400 uppercase">
+                        Nenhum colaborador ou candidato ativo localizado para o filtro aplicado.
+                      </td>
+                    </tr>
+                  ) : filteredEmployees.map(emp => (
                     <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors group ${emp.status === 'inactive' ? 'opacity-50' : ''}`}>
                       <td className="sticky left-0 z-10 bg-white p-3 md:p-4 border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-2">
@@ -922,6 +1193,11 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                             <p onClick={() => setSelectedEmployeeFinance(emp)} className={`text-[9px] md:text-[10px] font-black uppercase truncate flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors ${emp.status === 'inactive' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                               {emp.paymentModality === 'CLT' && <Clock size={10} className="text-blue-500" />}
                               {emp.name}
+                              {emp.isCandidate && (
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 shrink-0">
+                                  Candidato Ativo
+                                </span>
+                              )}
                             </p>
                             <p className="text-[7px] md:text-[8px] text-slate-400 font-bold uppercase truncate">{emp.role}</p>
                           </div>
@@ -967,51 +1243,74 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         /* ABA: BANCO DE CANDIDATOS (CURRÍCULOS & TALENTOS PARA CONTRATAÇÃO)         */
         /* ========================================================================= */
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Métricas do Banco de Candidatos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+          {/* 3 Cards Solicitados: Reservas, Ativos e Descartados / Arquivados */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Card 1: Reservas */}
+            <div 
+              onClick={() => setCandidateStatusFilter(candidateStatusFilter === 'reserva' ? 'ALL' : 'reserva')}
+              className={`p-5 rounded-[28px] border transition-all cursor-pointer select-none flex items-center justify-between ${
+                candidateStatusFilter === 'reserva' 
+                  ? 'bg-blue-50/70 border-blue-400 shadow-sm ring-2 ring-blue-400/30' 
+                  : 'bg-white border-slate-200/80 shadow-xs hover:border-blue-300'
+              }`}
+            >
               <div>
-                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total no Banco</span>
-                <p className="text-2xl font-black text-[#0c2a1c] mt-1">{(state.candidates || []).length}</p>
+                <span className="text-[9px] font-black uppercase text-blue-700 tracking-wider flex items-center gap-1.5">
+                  <Users size={13} /> Reservas
+                </span>
+                <p className="text-3xl font-black text-slate-900 mt-1">{reservasCount}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                  Banco de talentos & disponíveis
+                </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#0c2a1c]/5 text-[#16462d] flex items-center justify-center">
-                <Users size={22} />
+              <div className="w-13 h-13 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Users size={24} />
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+            {/* Card 2: Ativos */}
+            <div 
+              onClick={() => setCandidateStatusFilter(candidateStatusFilter === 'ativo' ? 'ALL' : 'ativo')}
+              className={`p-5 rounded-[28px] border transition-all cursor-pointer select-none flex items-center justify-between ${
+                candidateStatusFilter === 'ativo' 
+                  ? 'bg-emerald-50/80 border-emerald-400 shadow-sm ring-2 ring-emerald-400/30' 
+                  : 'bg-white border-slate-200/80 shadow-xs hover:border-emerald-300'
+              }`}
+            >
               <div>
-                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Disponíveis / Banco</span>
-                <p className="text-2xl font-black text-blue-600 mt-1">
-                  {(state.candidates || []).filter(c => c.status === 'banco_talentos' || !c.status).length}
+                <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 size={13} className="text-emerald-600" /> Ativos
+                </span>
+                <p className="text-3xl font-black text-emerald-950 mt-1">{ativosCount}</p>
+                <p className="text-[9px] font-bold text-emerald-700/80 uppercase mt-0.5">
+                  Disponíveis na frequência da equipe
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Sparkles size={22} />
+              <div className="w-13 h-13 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 size={24} />
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
+            {/* Card 3: Descartados / Arquivados */}
+            <div 
+              onClick={() => setCandidateStatusFilter(candidateStatusFilter === 'descartado' ? 'ALL' : 'descartado')}
+              className={`p-5 rounded-[28px] border transition-all cursor-pointer select-none flex items-center justify-between ${
+                candidateStatusFilter === 'descartado' 
+                  ? 'bg-slate-100 border-slate-400 shadow-sm ring-2 ring-slate-400/30' 
+                  : 'bg-white border-slate-200/80 shadow-xs hover:border-slate-300'
+              }`}
+            >
               <div>
-                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Em Triagem / Entrevista</span>
-                <p className="text-2xl font-black text-amber-600 mt-1">
-                  {(state.candidates || []).filter(c => c.status === 'em_analise' || c.status === 'entrevistado').length}
+                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                  <Archive size={13} /> Descartados / Arquivados
+                </span>
+                <p className="text-3xl font-black text-slate-700 mt-1">{descartadosCount}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                  Histórico & desconsiderados
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <Clock size={22} />
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-[28px] border border-slate-200/80 shadow-xs flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Aprovados / Efetivados</span>
-                <p className="text-2xl font-black text-emerald-600 mt-1">
-                  {(state.candidates || []).filter(c => c.status === 'aprovado' || c.status === 'contratado').length}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <CheckCircle2 size={22} />
+              <div className="w-13 h-13 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center">
+                <Archive size={24} />
               </div>
             </div>
           </div>
@@ -1030,19 +1329,16 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-              {/* Filtro por Status */}
+              {/* Filtro por Status: Reservas, Ativos, Descartados / Arquivados */}
               <select 
                 value={candidateStatusFilter}
-                onChange={e => setCandidateStatusFilter(e.target.value)}
+                onChange={e => setCandidateStatusFilter(e.target.value as any)}
                 className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-[#16462d]"
               >
-                <option value="ALL">STATUS: TODOS</option>
-                <option value="banco_talentos">BANCO DE TALENTOS</option>
-                <option value="em_analise">EM ANÁLISE / TRIAGEM</option>
-                <option value="entrevistado">ENTREVISTADO</option>
-                <option value="aprovado">APROVADO</option>
-                <option value="contratado">CONTRATADO</option>
-                <option value="descartado">ARQUIVADO / DESCARTADO</option>
+                <option value="ALL">TODOS OS STATUS ({(state.candidates || []).length})</option>
+                <option value="reserva">RESERVAS ({reservasCount})</option>
+                <option value="ativo">ATIVOS ({ativosCount})</option>
+                <option value="descartado">DESCARTADOS / ARQUIVADOS ({descartadosCount})</option>
               </select>
 
               {/* Filtro por Cargo */}
@@ -1110,23 +1406,9 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
               <div className="divide-y divide-slate-100">
                 {filteredCandidates.map(cand => {
                   const age = calculateAge(cand.birthDate);
-                  const statusColors: Record<string, string> = {
-                    banco_talentos: 'bg-blue-50 text-blue-700 border-blue-200',
-                    em_analise: 'bg-amber-50 text-amber-700 border-amber-200',
-                    entrevistado: 'bg-purple-50 text-purple-700 border-purple-200',
-                    aprovado: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-                    contratado: 'bg-green-100 text-green-900 border-green-300 font-black',
-                    descartado: 'bg-slate-100 text-slate-600 border-slate-200'
-                  };
-
-                  const statusLabels: Record<string, string> = {
-                    banco_talentos: 'BANCO DE TALENTOS',
-                    em_analise: 'EM ANÁLISE / TRIAGEM',
-                    entrevistado: 'ENTREVISTADO',
-                    aprovado: 'APROVADO',
-                    contratado: 'CONTRATADO',
-                    descartado: 'ARQUIVADO'
-                  };
+                  const activeCand = isAtivo(cand.status);
+                  const reservaCand = isReserva(cand.status);
+                  const descartadoCand = isDescartado(cand.status);
 
                   return (
                     <div key={cand.id} className="p-6 hover:bg-slate-50/60 transition-colors space-y-4">
@@ -1146,9 +1428,21 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                                   {cand.desiredRole}
                                 </span>
                               )}
-                              <span className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-lg border ${statusColors[cand.status] || 'bg-slate-100 text-slate-600'}`}>
-                                {statusLabels[cand.status] || cand.status}
-                              </span>
+                              {activeCand && (
+                                <span className="text-[8px] font-black uppercase px-2.5 py-0.5 rounded-lg border bg-emerald-100 text-emerald-900 border-emerald-300 flex items-center gap-1">
+                                  <CheckCircle2 size={11} className="text-emerald-700" /> ATIVO (NA FREQUÊNCIA)
+                                </span>
+                              )}
+                              {reservaCand && (
+                                <span className="text-[8px] font-black uppercase px-2.5 py-0.5 rounded-lg border bg-blue-50 text-blue-800 border-blue-200 flex items-center gap-1">
+                                  <Users size={11} className="text-blue-600" /> RESERVA
+                                </span>
+                              )}
+                              {descartadoCand && (
+                                <span className="text-[8px] font-black uppercase px-2.5 py-0.5 rounded-lg border bg-slate-100 text-slate-600 border-slate-200 flex items-center gap-1">
+                                  <Archive size={11} className="text-slate-500" /> DESCARTADO / ARQUIVADO
+                                </span>
+                              )}
                             </div>
                             
                             {/* Idade calculada automaticamente em destaque */}
@@ -1183,7 +1477,25 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                         </div>
 
                         {/* Botões de Ação do Candidato */}
-                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                          {/* Atalho para Lançar Frequência caso o Candidato esteja Ativo */}
+                          {activeCand && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttendanceSearch(cand.name);
+                                setAttendanceFilterType('all');
+                                setRhTab('team');
+                                notify(`Localizando ${cand.name} na frequência da equipe`);
+                              }}
+                              className="bg-[#0c2a1c] hover:bg-[#16462d] text-white px-3.5 py-2 rounded-xl font-black text-[9px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                              title="Lançar presença na frequência da equipe"
+                            >
+                              <Calendar size={13} className="text-[#9bb779]" />
+                              <span>LANÇAR FREQUÊNCIA</span>
+                            </button>
+                          )}
+
                           {/* Botão de Contratação / Efetivação */}
                           <button
                             type="button"
@@ -1746,12 +2058,9 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                     value={candidateForm.status} 
                     onChange={e => setCandidateForm({...candidateForm, status: e.target.value as any})}
                   >
-                    <option value="banco_talentos">BANCO DE TALENTOS</option>
-                    <option value="em_analise">EM ANÁLISE / TRIAGEM</option>
-                    <option value="entrevistado">ENTREVISTADO</option>
-                    <option value="aprovado">APROVADO</option>
-                    <option value="contratado">CONTRATADO</option>
-                    <option value="descartado">ARQUIVADO</option>
+                    <option value="reserva">RESERVA (BANCO DE TALENTOS)</option>
+                    <option value="ativo">ATIVO (DISPONÍVEL NA FREQUÊNCIA DA EQUIPE)</option>
+                    <option value="descartado">DESCARTADO / ARQUIVADO</option>
                   </select>
                 </div>
               </div>

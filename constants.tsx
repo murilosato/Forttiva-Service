@@ -70,7 +70,7 @@ export const INITIAL_STATE: AppState = {
   ],
   company: {
     id: 'forttiva-main',
-    name: 'FORTTIVA SERVICE',
+    name: 'FORTTIVA',
     plan: 'PRO',
     financeCategories: ['Salários', 'Insumos', 'Manutenção', 'Impostos', 'Aluguel', 'Combustível'],
     inventoryCategories: ['Insumos', 'Equipamentos', 'Manutenção', 'EPIS'],
