@@ -88,12 +88,17 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     observation: ''
   });
 
-  // Controle de Abas: 'team' (Equipe e Frequência) ou 'candidates' (Banco de Candidatos)
-  const [rhTab, setRhTab] = useState<'team' | 'candidates'>('team');
+  // Controle de Abas: 'team' (Equipe e Frequência), 'inactive' (Colaboradores Desativados) ou 'candidates' (Banco de Candidatos)
+  const [rhTab, setRhTab] = useState<'team' | 'inactive' | 'candidates'>('team');
+  const [inactiveSearch, setInactiveSearch] = useState('');
 
   // Busca e Filtros na Frequência da Equipe
   const [attendanceSearch, setAttendanceSearch] = useState('');
   const [attendanceFilterType, setAttendanceFilterType] = useState<'all' | 'employees' | 'candidates'>('all');
+
+  // Contadores de Colaboradores
+  const inativosCount = useMemo(() => state.employees.filter(e => e.status === 'inactive').length, [state.employees]);
+  const ativosEquipeCount = useMemo(() => state.employees.filter(e => e.status === 'active').length, [state.employees]);
 
   // Estados do Banco de Candidatos
   const [showCandidateModal, setShowCandidateModal] = useState(false);
@@ -208,7 +213,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           name: candidateForm.name.trim().toUpperCase(),
           role: candidateForm.desiredRole ? candidateForm.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
           status: 'active',
-          defaultValue: 0,
+          defaultValue: 120,
           paymentModality: 'DIARIA',
           phone: candidateForm.phone || null,
           address: candidateForm.address ? candidateForm.address.trim().toUpperCase() : null
@@ -305,7 +310,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
               name: cand.name.trim().toUpperCase(),
               role: cand.desiredRole ? cand.desiredRole.trim().toUpperCase() : 'CANDIDATO ATIVO',
               status: 'active',
-              defaultValue: 0,
+              defaultValue: 120,
               paymentModality: 'DIARIA',
               phone: cand.phone || null,
               address: cand.address ? cand.address.trim().toUpperCase() : null
@@ -429,6 +434,14 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
       }
 
       const targetCompanyId = emp.companyId || compId;
+      const dailyRate = Number(emp.defaultValue) > 0 ? Number(emp.defaultValue) : 120;
+
+      // Se o colaborador estava com diária 0, atualiza seu cadastro com a diária padrão
+      if (Number(emp.defaultValue) <= 0 && emp.paymentModality === 'DIARIA') {
+        try {
+          await dbSave('employees', { id: emp.id, defaultValue: dailyRate });
+        } catch (err) {}
+      }
 
       if (!existing) {
         await dbSave('attendance_records', {
@@ -436,7 +449,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           employeeId: empId,
           date,
           status: 'present',
-          value: Number(emp.defaultValue) || 0,
+          value: dailyRate,
           paymentStatus: 'pendente'
         });
       } else if (existing.status === 'present') {
@@ -444,7 +457,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
           ...existing, 
           companyId: targetCompanyId,
           status: 'partial', 
-          value: (Number(emp.defaultValue) || 0) / 2 
+          value: dailyRate / 2 
         });
       } else if (existing.status === 'partial') {
         await dbSave('attendance_records', { 
@@ -823,25 +836,45 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
   // Cálculos de Resumo Financeiro do Mês Visualizado - Fechamento do Mês
   const monthSummary = useMemo(() => {
     const yearMonth = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}`;
-    const allEmpMap = new Map<string, { status: string }>();
-    state.employees.forEach(e => allEmpMap.set(e.id, { status: e.status }));
+    const allEmpMap = new Map<string, Employee>();
+    state.employees.forEach(e => allEmpMap.set(e.id, e));
     (state.candidates || []).forEach(c => {
       if (!allEmpMap.has(c.id)) {
-        allEmpMap.set(c.id, { status: isAtivo(c.status) ? 'active' : 'inactive' });
+        allEmpMap.set(c.id, {
+          id: c.id,
+          companyId: c.companyId || state.currentUser?.companyId || '',
+          name: c.name,
+          role: c.desiredRole || 'CANDIDATO ATIVO',
+          status: isAtivo(c.status) ? 'active' : 'inactive',
+          defaultValue: 120,
+          paymentModality: 'DIARIA'
+        });
       }
     });
     
     let paid = 0;
     let pending = 0;
+    let countPresencas = 0;
+    let countMeias = 0;
+    let countFaltas = 0;
 
     state.attendanceRecords.forEach(record => {
       if (record.date.startsWith(yearMonth)) {
         const emp = allEmpMap.get(record.employeeId);
-        if (!emp) return;
-        if (!showInactive && emp.status === 'inactive') return;
+        const dailyRate = Number(emp?.defaultValue) > 0 ? Number(emp?.defaultValue) : 120;
+        
+        let recordVal = Number(record.value) || 0;
+        if (recordVal <= 0) {
+          if (record.status === 'present') recordVal = dailyRate;
+          else if (record.status === 'partial') recordVal = dailyRate / 2;
+        }
+
+        if (record.status === 'present') countPresencas++;
+        else if (record.status === 'partial') countMeias++;
+        else if (record.status === 'absent') countFaltas++;
 
         // Cálculo: (Valor do Dia + Bônus) - Descontos
-        const netValue = Math.max(0, (record.value + (record.bonusValue || 0)) - (record.discountValue || 0));
+        const netValue = Math.max(0, (recordVal + (record.bonusValue || 0)) - (record.discountValue || 0));
         if (record.paymentStatus === 'pago') {
           paid += netValue;
         } else {
@@ -850,8 +883,71 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
       }
     });
 
-    return { paid, pending, total: paid + pending };
-  }, [state.attendanceRecords, state.employees, state.candidates, currentCalendarDate, showInactive]);
+    const total = paid + pending;
+    const totalDiasEquipe = countPresencas + (countMeias * 0.5);
+
+    return { 
+      paid, 
+      pending, 
+      total, 
+      countPresencas, 
+      countMeias, 
+      countFaltas, 
+      totalDiasEquipe 
+    };
+  }, [state.attendanceRecords, state.employees, state.candidates, currentCalendarDate]);
+
+  // Helper para calcular métricas de frequência e diárias de um colaborador no mês selecionado
+  const getEmployeeMonthStats = (emp: Employee) => {
+    const yearMonth = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}`;
+    const dailyRate = Number(emp.defaultValue) > 0 ? Number(emp.defaultValue) : 120;
+    let pCount = 0;
+    let halfCount = 0;
+    let fCount = 0;
+    let totalVal = 0;
+
+    state.attendanceRecords.forEach(r => {
+      if (r.employeeId === emp.id && r.date.startsWith(yearMonth)) {
+        const virtualStatus = getVirtualStatus(r);
+        if (virtualStatus === 'present') {
+          pCount++;
+          const val = Number(r.value) > 0 ? Number(r.value) : dailyRate;
+          totalVal += val;
+        } else if (virtualStatus === 'partial') {
+          halfCount++;
+          const val = Number(r.value) > 0 ? Number(r.value) : (dailyRate / 2);
+          totalVal += val;
+        } else if (virtualStatus === 'absent') {
+          fCount++;
+        }
+      }
+    });
+
+    const totalDaysWorked = pCount + (halfCount * 0.5);
+
+    return {
+      dailyRate,
+      pCount,
+      halfCount,
+      fCount,
+      totalDaysWorked,
+      totalVal
+    };
+  };
+
+  // Colaboradores desativados filtrados por busca
+  const filteredInactiveEmployees = useMemo(() => {
+    const list = state.employees.filter(e => e.status === 'inactive');
+    if (!inactiveSearch.trim()) return list;
+    const q = inactiveSearch.toLowerCase().trim();
+    return list.filter(e => 
+      e.name.toLowerCase().includes(q) || 
+      (e.role && e.role.toLowerCase().includes(q)) ||
+      (e.cpf && e.cpf.toLowerCase().includes(q)) ||
+      (e.phone && e.phone.toLowerCase().includes(q)) ||
+      (e.address && e.address.toLowerCase().includes(q))
+    );
+  }, [state.employees, inactiveSearch]);
 
   const formatMoney = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -907,53 +1003,88 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
     <div className="space-y-6 pb-24">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-xl font-black text-[#0c2a1c] uppercase tracking-tight">
-            {rhTab === 'team' ? 'Equipe & Frequência' : 'Banco de Candidatos & Talentos'}
+          <h2 className="text-xl font-black text-[#0c2a1c] uppercase tracking-tight flex items-center gap-2">
+            {rhTab === 'team' && <span>Equipe & Frequência</span>}
+            {rhTab === 'inactive' && <span>Colaboradores Desativados</span>}
+            {rhTab === 'candidates' && <span>Banco de Candidatos & Talentos</span>}
           </h2>
           <p className="text-[10px] text-[#4b6f34] font-bold uppercase tracking-widest mt-1">
-            {rhTab === 'team' ? 'Gestão de Pessoal e Presença Forttiva' : 'Banco de Dados para Consultas e Futuras Contratações'}
+            {rhTab === 'team' && 'Gestão de Pessoal Ativo e Controle de Presença / Diárias'}
+            {rhTab === 'inactive' && 'Histórico e Reativação de Colaboradores Desligados / Inativos'}
+            {rhTab === 'candidates' && 'Banco de Dados para Consultas e Futuras Contratações'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Alternador de Abas de RH: Equipe vs Banco de Candidatos */}
-          <div className="flex bg-slate-200/80 p-1 rounded-2xl w-full sm:w-auto">
+          {/* Alternador de 3 Abas de RH: Equipe vs Desativados vs Banco de Candidatos */}
+          <div className="flex bg-slate-200/80 p-1 rounded-2xl w-full sm:w-auto overflow-x-auto">
             <button 
               type="button"
               onClick={() => setRhTab('team')} 
-              className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 rhTab === 'team' 
                   ? 'bg-[#0c2a1c] text-white shadow-md' 
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Users size={15}/>
+              <Users size={14}/>
               <span>Equipe & Frequência</span>
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black ${
+                rhTab === 'team' ? 'bg-[#9bb779] text-[#0c2a1c]' : 'bg-slate-300 text-slate-700'
+              }`}>
+                {ativosEquipeCount}
+              </span>
             </button>
+
+            <button 
+              type="button"
+              onClick={() => setRhTab('inactive')} 
+              className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                rhTab === 'inactive' 
+                  ? 'bg-rose-900 text-white shadow-md' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserX size={14}/>
+              <span>Desativados</span>
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black ${
+                rhTab === 'inactive' ? 'bg-rose-200 text-rose-900' : 'bg-rose-100 text-rose-700'
+              }`}>
+                {inativosCount}
+              </span>
+            </button>
+
             <button 
               type="button"
               onClick={() => setRhTab('candidates')} 
-              className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 rhTab === 'candidates' 
                   ? 'bg-[#16462d] text-white shadow-md' 
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <UserRoundSearch size={15}/>
+              <UserRoundSearch size={14}/>
               <span>Banco de Candidatos</span>
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black ${
+                rhTab === 'candidates' ? 'bg-[#9bb779] text-[#0c2a1c]' : 'bg-slate-300 text-slate-700'
+              }`}>
+                {(state.candidates || []).length}
+              </span>
             </button>
           </div>
 
-          {rhTab === 'team' ? (
+          {rhTab === 'team' && (
             <>
               <button onClick={() => setShowInactive(!showInactive)} className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[9px] uppercase transition-all shadow-sm hover:border-[#7ea24e] truncate">
-                 {showInactive ? 'Filtrar Ativos' : 'Exibir Todos'}
+                 {showInactive ? 'Filtrar Apenas Ativos' : 'Exibir Todos na Grade'}
               </button>
               <button onClick={() => { setEditingId(null); setEmployeeForm(initialFormState); setShowForm(true); }} className="flex-1 md:flex-none bg-[#0c2a1c] text-white px-5 py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-[#16462d] transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0">
                  <UserPlus size={16}/> Novo Cadastro
               </button>
             </>
-          ) : (
+          )}
+
+          {rhTab === 'candidates' && (
             <button 
               onClick={() => {
                 setEditingCandidateId(null);
@@ -968,7 +1099,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
         </div>
       </header>
 
-      {rhTab === 'team' ? (
+      {rhTab === 'team' && (
         <>
           {/* Subtotais de Fechamento do Mês em Visualização */}
           <div className="bg-white p-5 md:p-6 rounded-[32px] border border-slate-200/90 shadow-sm space-y-4">
@@ -1064,8 +1195,8 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                     <h4 className="text-2xl font-black text-white tracking-tight truncate">
                       {formatMoney(monthSummary.total)}
                     </h4>
-                    <p className="text-[8px] font-bold text-white/60 uppercase tracking-widest mt-0.5">
-                      Total consolidado do período
+                    <p className="text-[8px] font-bold text-white/70 uppercase tracking-widest mt-0.5">
+                      {monthSummary.totalDiasEquipe} dias contabilizados ({monthSummary.countPresencas}P • {monthSummary.countMeias}½ • {monthSummary.countFaltas}F)
                     </p>
                  </div>
               </div>
@@ -1161,7 +1292,7 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
             </div>
             
             <div className="overflow-x-auto scrollbar-hide">
-              <table className="w-full min-w-[1000px] md:min-w-[800px] border-collapse">
+              <table className="w-full min-w-[1250px] border-collapse">
                 <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase border-b">
                   <tr>
                     <th className="sticky left-0 z-20 bg-slate-50 p-3 md:p-4 text-left border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] min-w-[140px] md:min-w-[220px]">Colaborador</th>
@@ -1169,76 +1300,308 @@ const Employees: React.FC<EmployeesProps> = ({ state, setState, notify }) => {
                        const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                        const isToday = dateStr === new Date().toISOString().split('T')[0];
                        return (
-                         <th key={day} className="p-1 md:p-2 text-center border-r min-w-[44px] md:min-w-[34px]">
+                         <th key={day} className="p-1 md:p-2 text-center border-r min-w-[38px] md:min-w-[34px]">
                            <span className={`inline-flex items-center justify-center w-8 h-8 md:w-7 md:h-7 rounded-lg transition-all ${isToday ? 'bg-blue-600 text-white shadow-md' : ''}`}>
                             {day}
                            </span>
                          </th>
                        );
                     })}
+                    {/* Colunas Resumo de Contabilização das Diárias */}
+                    <th className="p-2 text-center border-r min-w-[80px] bg-slate-100 text-slate-700">Diária</th>
+                    <th className="p-2 text-center border-r min-w-[38px] bg-emerald-50 text-emerald-800" title="Total de Presenças (P)">P</th>
+                    <th className="p-2 text-center border-r min-w-[38px] bg-amber-50 text-amber-800" title="Total de Meias Diárias (½)">½</th>
+                    <th className="p-2 text-center border-r min-w-[38px] bg-rose-50 text-rose-800" title="Total de Faltas (F)">F</th>
+                    <th className="p-2 text-center border-r min-w-[50px] bg-slate-100 text-slate-700" title="Dias Equivalentes Trabalhados">Dias</th>
+                    <th className="p-2 text-right border-r min-w-[110px] bg-emerald-100/70 text-emerald-950 font-black">Subtotal (R$)</th>
+                    <th className="p-2 text-center min-w-[44px] bg-slate-100 text-slate-600" title="Extrato / Ficha Financeira">Ficha</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan={calendarDays.length + 1} className="p-8 text-center text-xs font-bold text-slate-400 uppercase">
+                      <td colSpan={calendarDays.length + 8} className="p-8 text-center text-xs font-bold text-slate-400 uppercase">
                         Nenhum colaborador ou candidato ativo localizado para o filtro aplicado.
                       </td>
                     </tr>
-                  ) : filteredEmployees.map(emp => (
-                    <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors group ${emp.status === 'inactive' ? 'opacity-50' : ''}`}>
-                      <td className="sticky left-0 z-10 bg-white p-3 md:p-4 border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
-                        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-2">
-                          <div className="min-w-0">
-                            <p onClick={() => setSelectedEmployeeFinance(emp)} className={`text-[9px] md:text-[10px] font-black uppercase truncate flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors ${emp.status === 'inactive' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                              {emp.paymentModality === 'CLT' && <Clock size={10} className="text-blue-500" />}
-                              {emp.name}
-                              {emp.isCandidate && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 shrink-0">
-                                  Candidato Ativo
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[7px] md:text-[8px] text-slate-400 font-bold uppercase truncate">{emp.role}</p>
+                  ) : filteredEmployees.map(emp => {
+                    const stats = getEmployeeMonthStats(emp);
+                    return (
+                      <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors group ${emp.status === 'inactive' ? 'opacity-50' : ''}`}>
+                        <td className="sticky left-0 z-10 bg-white p-3 md:p-4 border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
+                          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-2">
+                            <div className="min-w-0">
+                              <p onClick={() => setSelectedEmployeeFinance(emp)} className={`text-[9px] md:text-[10px] font-black uppercase truncate flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors ${emp.status === 'inactive' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                {emp.paymentModality === 'CLT' && <Clock size={10} className="text-blue-500" />}
+                                {emp.name}
+                                {emp.isCandidate && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 shrink-0">
+                                    Candidato Ativo
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[7px] md:text-[8px] text-slate-400 font-bold uppercase truncate">{emp.role}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleEdit(emp)} className="p-1 text-blue-500 hover:bg-blue-50 rounded-lg cursor-pointer" title="Editar Colaborador"><Edit2 size={10}/></button>
+                              <button onClick={() => setConfirmStatusToggle(emp)} className={`p-1 rounded-lg cursor-pointer ${emp.status === 'active' ? 'text-rose-400 hover:bg-rose-50' : 'text-emerald-500 hover:bg-emerald-50'}`} title={emp.status === 'active' ? 'Desativar' : 'Ativar'}><Power size={10}/></button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleEdit(emp)} className="p-1 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={10}/></button>
-                            <button onClick={() => setConfirmStatusToggle(emp)} className={`p-1 rounded-lg ${emp.status === 'active' ? 'text-rose-400 hover:bg-rose-50' : 'text-emerald-500 hover:bg-emerald-50'}`} title={emp.status === 'active' ? 'Desativar' : 'Ativar'}><Power size={10}/></button>
-                          </div>
-                        </div>
-                      </td>
-                      {calendarDays.map(day => {
-                        const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                        const att = state.attendanceRecords.find(r => r.employeeId === emp.id && r.date === dateStr);
-                        const isToday = dateStr === new Date().toISOString().split('T')[0];
-                        const virtualStatus = att ? getVirtualStatus(att) : null;
-                        let bgColor = 'text-slate-200 hover:bg-slate-100';
-                        if (att) {
-                            switch(virtualStatus) {
-                              case 'present': bgColor = 'bg-emerald-600 text-white shadow-inner font-black'; break;
-                              case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner font-black'; break;
-                              case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner font-black'; break;
-                              case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner font-black'; break;
-                              case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner font-black'; break;
-                              case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner font-black'; break;
-                            }
-                        } else if (isToday) {
-                            bgColor = 'bg-blue-50/40 text-blue-500 font-bold';
-                        }
-                        return (
-                          <td key={day} onClick={() => handleToggleAttendance(emp.id, dateStr)} className={`p-0 border-r h-12 md:h-10 text-center text-[10px] font-black transition-all cursor-pointer active:scale-95 ${bgColor}`}>
-                            {getAttendanceLabel(att, emp)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                        </td>
+                        {calendarDays.map(day => {
+                          const dateStr = `${currentCalendarDate.getFullYear()}-${String(currentCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                          const att = state.attendanceRecords.find(r => r.employeeId === emp.id && r.date === dateStr);
+                          const isToday = dateStr === new Date().toISOString().split('T')[0];
+                          const virtualStatus = att ? getVirtualStatus(att) : null;
+                          let bgColor = 'text-slate-200 hover:bg-slate-100';
+                          if (att) {
+                              switch(virtualStatus) {
+                                case 'present': bgColor = 'bg-emerald-600 text-white shadow-inner font-black'; break;
+                                case 'absent': bgColor = 'bg-rose-500 text-white shadow-inner font-black'; break;
+                                case 'partial': bgColor = 'bg-amber-500 text-white shadow-inner font-black'; break;
+                                case 'atestado': bgColor = 'bg-purple-600 text-white shadow-inner font-black'; break;
+                                case 'justified': bgColor = 'bg-sky-500 text-white shadow-inner font-black'; break;
+                                case 'vacation': bgColor = 'bg-amber-400 text-white shadow-inner font-black'; break;
+                              }
+                          } else if (isToday) {
+                              bgColor = 'bg-blue-50/40 text-blue-500 font-bold';
+                          }
+                          return (
+                            <td key={day} onClick={() => handleToggleAttendance(emp.id, dateStr)} className={`p-0 border-r h-12 md:h-10 text-center text-[10px] font-black transition-all cursor-pointer active:scale-95 ${bgColor}`}>
+                              {getAttendanceLabel(att, emp)}
+                            </td>
+                          );
+                        })}
+                        {/* Células Resumo de Diárias do Colaborador */}
+                        <td className="p-2 text-center border-r text-[10px] font-bold bg-slate-50/70 text-slate-700">
+                          {formatMoney(stats.dailyRate)}
+                        </td>
+                        <td className="p-2 text-center border-r text-[10px] font-black bg-emerald-50/40 text-emerald-800">
+                          {stats.pCount > 0 ? stats.pCount : '-'}
+                        </td>
+                        <td className="p-2 text-center border-r text-[10px] font-black bg-amber-50/40 text-amber-800">
+                          {stats.halfCount > 0 ? stats.halfCount : '-'}
+                        </td>
+                        <td className="p-2 text-center border-r text-[10px] font-black bg-rose-50/40 text-rose-700">
+                          {stats.fCount > 0 ? stats.fCount : '-'}
+                        </td>
+                        <td className="p-2 text-center border-r text-[10px] font-black bg-slate-50/80 text-slate-900">
+                          {stats.totalDaysWorked > 0 ? stats.totalDaysWorked.toFixed(1).replace('.0', '') : '0'}
+                        </td>
+                        <td className="p-2 text-right border-r text-[11px] font-black bg-emerald-50/90 text-emerald-950">
+                          {formatMoney(stats.totalVal)}
+                        </td>
+                        <td className="p-2 text-center">
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedEmployeeFinance(emp)}
+                            className="p-1.5 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
+                            title={`Abrir extrato de diárias de ${emp.name}`}
+                          >
+                            <Wallet size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-black text-[10px] uppercase text-slate-800">
+                  <tr>
+                    <td className="sticky left-0 z-10 bg-slate-100 p-3 md:p-4 text-left border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
+                      Total Equipe ({filteredEmployees.length})
+                    </td>
+                    <td colSpan={calendarDays.length} className="p-2 text-center text-slate-500 font-bold border-r">
+                      Total de diárias contabilizadas no mês
+                    </td>
+                    <td className="p-2 text-center border-r text-slate-400">-</td>
+                    <td className="p-2 text-center border-r text-emerald-800 bg-emerald-100/50">{monthSummary.countPresencas}</td>
+                    <td className="p-2 text-center border-r text-amber-800 bg-amber-100/50">{monthSummary.countMeias}</td>
+                    <td className="p-2 text-center border-r text-rose-800 bg-rose-100/50">{monthSummary.countFaltas}</td>
+                    <td className="p-2 text-center border-r text-slate-900 bg-slate-200/70">{monthSummary.totalDiasEquipe}</td>
+                    <td className="p-2 text-right border-r text-emerald-950 bg-emerald-200/80 text-xs">
+                      {formatMoney(monthSummary.total)}
+                    </td>
+                    <td className="p-2 text-center">-</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
         </>
-      ) : (
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: COLABORADORES DESATIVADOS                                            */}
+      {/* ========================================================================= */}
+      {rhTab === 'inactive' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Top Banner de Colaboradores Desativados */}
+          <div className="bg-white p-6 rounded-[32px] border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shadow-xs shrink-0">
+                <UserX size={28} />
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase text-rose-700 tracking-widest block">
+                  Gestão de Inativos & Desligados
+                </span>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                  Colaboradores Desativados ({inativosCount})
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                  Consulte histórico, fichas de pagamento e reative colaboradores a qualquer momento
+                </p>
+              </div>
+            </div>
+
+            {/* Busca de Desativados */}
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text"
+                placeholder="BUSCAR POR NOME, CARGO, CPF OU TELEFONE..."
+                value={inactiveSearch}
+                onChange={e => setInactiveSearch(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-2xl text-[10px] font-black uppercase outline-none focus:bg-white focus:border-rose-400 shadow-xs transition-all"
+              />
+              {inactiveSearch && (
+                <button 
+                  onClick={() => setInactiveSearch('')} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Lista de Colaboradores Desativados */}
+          <div className="bg-white rounded-[32px] border border-slate-200/90 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Users size={16} className="text-rose-600"/> 
+                Listagem de Inativos ({filteredInactiveEmployees.length})
+              </span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase">
+                Clique em Reativar para retornar o colaborador à equipe ativa imediatamente
+              </span>
+            </div>
+
+            {filteredInactiveEmployees.length === 0 ? (
+              <div className="p-16 text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+                  <UserCheck size={32} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-700 uppercase">
+                    {inactiveSearch ? 'Nenhum colaborador desativado encontrado' : 'Nenhum colaborador desativado'}
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    {inactiveSearch 
+                      ? 'Tente ajustar os termos de pesquisa pelo nome, cargo ou CPF.' 
+                      : 'Todos os colaboradores cadastrados estão atualmente com status ativo.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredInactiveEmployees.map(emp => {
+                  return (
+                    <div key={emp.id} className="p-5 md:p-6 hover:bg-slate-50/60 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Dados Básicos */}
+                      <div className="flex items-start sm:items-center gap-3 md:gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 border border-slate-200 flex items-center justify-center font-black text-base shadow-xs shrink-0">
+                          {emp.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                              {emp.name}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-md text-[8px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-200 shrink-0">
+                              Desativado
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[8px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                              {emp.paymentModality === 'CLT' ? 'REGIME CLT' : `DIÁRIA • ${formatMoney(Number(emp.defaultValue) || 120)}`}
+                            </span>
+                          </div>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                            {emp.role} {emp.admissionDate && `• Admissão: ${emp.admissionDate.split('-').reverse().join('/')}`}
+                          </p>
+
+                          {/* Detalhes de Contato */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-500 font-bold">
+                            {emp.phone && (
+                              <span className="inline-flex items-center gap-1">
+                                <Phone size={11} className="text-slate-400"/> {emp.phone}
+                              </span>
+                            )}
+                            {emp.cpf && (
+                              <span className="inline-flex items-center gap-1">
+                                <CreditCard size={11} className="text-slate-400"/> CPF: {emp.cpf}
+                              </span>
+                            )}
+                            {emp.pixKey && (
+                              <span className="inline-flex items-center gap-1">
+                                <Wallet size={11} className="text-slate-400"/> PIX: {emp.pixKey}
+                              </span>
+                            )}
+                            {emp.address && (
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin size={11} className="text-slate-400"/> {emp.address}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação */}
+                      <div className="flex items-center gap-2 self-start lg:self-auto shrink-0 flex-wrap">
+                        {/* Botão de Reativar */}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmStatusToggle(emp)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+                          title="Reativar colaborador para voltar à equipe ativa"
+                        >
+                          <Power size={13} />
+                          <span>Reativar Colaborador</span>
+                        </button>
+
+                        {/* Botão de Ficha Financeira */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEmployeeFinance(emp)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="Ver ficha financeira e extrato histórico"
+                        >
+                          <Wallet size={13} className="text-slate-500" />
+                          <span>Extrato / Ficha</span>
+                        </button>
+
+                        {/* Botão de Editar */}
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(emp)}
+                          className="p-2.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+                          title="Editar cadastro do colaborador"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: BANCO DE CANDIDATOS (CURRÍCULOS & TALENTOS PARA CONTRATAÇÃO)         */}
+      {/* ========================================================================= */}
+      {rhTab === 'candidates' && (
         /* ========================================================================= */
         /* ABA: BANCO DE CANDIDATOS (CURRÍCULOS & TALENTOS PARA CONTRATAÇÃO)         */
         /* ========================================================================= */
